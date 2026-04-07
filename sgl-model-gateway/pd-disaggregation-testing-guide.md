@@ -265,6 +265,134 @@ wait
 
 ---
 
+## 专项实战：`cache_aware` 策略（复杂且实用）
+
+`cache_aware` 是项目里非常值得学习的策略：它不是纯粹“最小负载”或“轮询”，而是**缓存亲和 + 负载保护**的混合决策。
+
+### 策略核心思想
+
+在 `src/policies/cache_aware.rs` 中，策略会动态切换两种路径：
+
+1. **负载不均衡** -> 走最小负载（shortest queue）
+2. **负载相对均衡** -> 走前缀缓存亲和（prefix match）
+
+不均衡判断条件（同时满足）：
+
+- `(max_load - min_load) > balance_abs_threshold`
+- `max_load > min_load * balance_rel_threshold`
+
+如果走缓存亲和路径：
+
+- 先算 `match_rate = matched_prefix_chars / input_chars`
+- 若 `match_rate > cache_threshold`，选最匹配的 worker
+- 否则回退到低负载 worker
+
+> 这就是“先稳住系统，再追求命中”的工程思路。
+
+### 它判断时依赖的数据从哪里来
+
+1. **请求文本** `request_text`
+   - 来源：router 在调用 policy 时传入 `SelectWorkerInfo.request_text`
+   - 用途：做 prefix 匹配
+
+2. **worker 实时负载** `worker.load()`
+   - 来源：gateway 侧 worker 负载计数
+   - 用途：判断不均衡、选最小负载 worker
+
+3. **worker 可用性**
+   - 来源：健康状态 + 熔断状态（`is_healthy && circuit.can_execute`）
+   - 用途：过滤不可选节点
+
+4. **近似缓存树（按 model 维护）**
+   - 来源：策略内部 `Tree` 结构，基于历史请求增量更新
+   - 用途：估计哪个 worker 更可能命中缓存（不是直接读取 GPU KV 实际命中）
+
+5. **策略参数**
+   - 来源：CLI/配置（`--cache-threshold`、`--balance-abs-threshold`、`--balance-rel-threshold`、`--eviction-interval`、`--max-tree-size`）
+
+### 用 Mock Server 调试 `cache_aware`（可复现）
+
+下面给出一套最小实验，直接复用“测试方式二”的 `mock_worker.py`。
+
+#### 步骤 1：按测试方式二启动 1 个 prefill + 2 个 decode
+
+同前文，不再重复。
+
+#### 步骤 2：Gateway 改为 `cache_aware`
+
+```bash
+cd sgl-model-gateway
+RUST_LOG=smg::policies::cache_aware=debug,smg::routers::http::pd_router=debug \
+./target/debug/sgl-model-gateway \
+  --pd-disaggregation \
+  --prefill http://127.0.0.1:8100 \
+  --decode http://127.0.0.1:8200 \
+  --decode http://127.0.0.1:8201 \
+  --host 127.0.0.1 \
+  --port 3000 \
+  --policy cache_aware \
+  --cache-threshold 0.5 \
+  --balance-abs-threshold 4 \
+  --balance-rel-threshold 1.2 \
+  --eviction-interval 30 \
+  --max-tree-size 10000
+```
+
+#### 步骤 3：设计“可验证策略行为”的请求集
+
+```bash
+# A组：高相似请求（预期逐步出现缓存亲和）
+for i in $(seq 1 8); do
+  curl -s -X POST http://127.0.0.1:3000/generate \
+    -H "Content-Type: application/json" \
+    -d '{"text":"Explain PD routing architecture in detail","stream":false}' >/dev/null
+done
+
+# B组：另一类前缀（观察是否形成另一簇亲和）
+for i in $(seq 1 8); do
+  curl -s -X POST http://127.0.0.1:3000/generate \
+    -H "Content-Type: application/json" \
+    -d '{"text":"Summarize cache-aware policy behavior","stream":false}' >/dev/null
+done
+
+# C组：并发混合流量（观察是否触发负载保护）
+for i in $(seq 1 20); do
+  curl -s -X POST http://127.0.0.1:3000/generate \
+    -H "Content-Type: application/json" \
+    -d "{\"text\":\"mixed request $i $(date +%s%N)\",\"stream\":false}" >/dev/null &
+done
+wait
+```
+
+#### 步骤 4：观察日志与断点
+
+1. **Gateway debug 日志**（`cache_aware`）
+   - 关注是否出现“load balancing triggered”之类的负载切换信号
+2. **Mock Worker 终端**
+   - 统计 8200/8201 的请求分布
+3. **RustRover 断点（推荐）**
+   - `CacheAwarePolicy::select_worker`
+   - `is_imbalanced` 判断处
+   - `match_rate > cache_threshold` 分支处
+   - `tree.insert(...)` 更新处
+
+#### 验收标准（建议）
+
+- 能说明某一批相似请求是否逐步收敛到同一 decode worker（缓存亲和）
+- 能说明高并发时是否回退到低负载选择（负载保护）
+- 能解释一次决策到底是“因匹配率”还是“因负载不均衡”触发
+
+### 常见误区
+
+1. **误区：它读取了真实 GPU KV 命中率**
+   - 实际：它用近似树估计缓存亲和，不直接读引擎内 KV 命中统计。
+2. **误区：它只做缓存，不看负载**
+   - 实际：负载不均衡时会优先 shortest queue。
+3. **误区：策略不同会改动后半段执行链路**
+   - 实际：主要改动“pair 产生过程”，后续注入/双发/容错基本统一。
+
+---
+
 ## 测试方式三：真实 GPU 环境部署（Windows + WSL2 + 单卡）
 
 在配备 NVIDIA GPU 的 Windows 机器上，通过 WSL2 启动多个真实的 SGLang Server 实例，**完整验证 PD 分离架构的端到端能力**，包括真实的模型推理和 KV Cache 传输。
