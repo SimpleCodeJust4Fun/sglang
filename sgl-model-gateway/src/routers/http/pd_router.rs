@@ -537,8 +537,26 @@ impl PDRouter {
         context: PDRequestContext<'_>,
         prefill: Arc<dyn Worker>,
         decode: Arc<dyn Worker>,
-        _start_time: Instant,
+        start_time: Instant,
     ) -> Response {
+        // [EXPERIMENT] Log request entry
+        let request_id = headers
+            .and_then(|h| h.get("x-request-id"))
+            .map(|v| v.to_str().unwrap_or("unknown"))
+            .unwrap_or("no-id");
+        
+        debug!(
+            "[PD-ROUTER] ===== REQUEST START ===== request_id={} route={}",
+            request_id, context.route
+        );
+        debug!(
+            "[PD-ROUTER] Selected workers: prefill={} (port from url={}) decode={} (port from url={})",
+            prefill.id(),
+            prefill.url(),
+            decode.id(),
+            decode.url()
+        );
+        
         // For non-streaming: use guard for automatic load management
         // For streaming: load will be managed in create_streaming_response
         let _prefill_guard =
@@ -568,6 +586,12 @@ impl PDRouter {
             false,
         );
 
+        // [EXPERIMENT] Log dual dispatch
+        let dispatch_time = Instant::now();
+        debug!(
+            "[PD-ROUTER] DUAL DISPATCH START: sending to both prefill and decode concurrently"
+        );
+
         // Send both requests concurrently and wait for both
         // Note: Using borrowed references avoids heap allocation
         events::RequestPDSentEvent {
@@ -579,18 +603,27 @@ impl PDRouter {
         let (prefill_result, decode_result) =
             tokio::join!(prefill_request.send(), decode_request.send());
 
+        let dispatch_duration = dispatch_time.elapsed();
+        debug!(
+            "[PD-ROUTER] Both requests completed (dispatch_duration={:?})",
+            dispatch_duration
+        );
+
         events::RequestReceivedEvent {}.emit();
 
-        // Process decode response
+        // [EXPERIMENT] Log decode response first (it's the main response)
         match decode_result {
             Ok(res) => {
                 let status = StatusCode::from_u16(res.status().as_u16())
                     .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-                debug!("Decode response status: {}", status);
+                debug!(
+                    "[PD-ROUTER] Decode response received: status={}",
+                    status
+                );
 
                 if !status.is_success() {
                     error!(
-                        "Decode server returned error status decode_url={} status={}",
+                        "[PD-ROUTER] ERROR: Decode server failed decode_url={} status={}",
                         decode.url(),
                         status
                     );
@@ -600,6 +633,12 @@ impl PDRouter {
                         .await;
                 }
 
+                // [EXPERIMENT] Log prefill response processing
+                let prefill_start = Instant::now();
+                debug!(
+                    "[PD-ROUTER] Processing prefill response (for logprobs/status check)"
+                );
+                
                 // Process prefill response
                 let prefill_body = if context.return_logprob {
                     match self
@@ -610,8 +649,17 @@ impl PDRouter {
                         )
                         .await
                     {
-                        Ok((_, body)) => body,
-                        Err(error_response) => return error_response,
+                        Ok((_, body)) => {
+                            debug!(
+                                "[PD-ROUTER] Prefill response processed successfully (logprobs extracted, duration={:?})",
+                                prefill_start.elapsed()
+                            );
+                            body
+                        }
+                        Err(error_response) => {
+                            error!("[PD-ROUTER] ERROR: Prefill response processing failed");
+                            return error_response;
+                        }
                     }
                 } else {
                     // Even if we don't need logprobs, we should check prefill status
@@ -619,8 +667,17 @@ impl PDRouter {
                         .process_prefill_response(prefill_result, prefill.url(), false)
                         .await
                     {
-                        Ok((_, body)) => body,
-                        Err(error_response) => return error_response,
+                        Ok((_, body)) => {
+                            debug!(
+                                "[PD-ROUTER] Prefill response processed successfully (status check only, duration={:?})",
+                                prefill_start.elapsed()
+                            );
+                            body
+                        }
+                        Err(error_response) => {
+                            error!("[PD-ROUTER] ERROR: Prefill response processing failed");
+                            return error_response;
+                        }
                     }
                 };
 
@@ -639,6 +696,10 @@ impl PDRouter {
 
                     let response_headers = header_utils::preserve_response_headers(res.headers());
 
+                    debug!(
+                        "[PD-ROUTER] Creating streaming response (returning decode stream)"
+                    );
+                    
                     self.create_streaming_response(
                         res.bytes_stream(),
                         status,
@@ -666,13 +727,25 @@ impl PDRouter {
 
                         match res.bytes().await {
                             Ok(decode_body) => {
+                                let total_duration = start_time.elapsed();
+                                debug!(
+                                    "[PD-ROUTER] ===== REQUEST COMPLETE ===== request_id={} status={} total_duration={:?} response_size={} bytes",
+                                    request_id,
+                                    status,
+                                    total_duration,
+                                    decode_body.len()
+                                );
+                                debug!(
+                                    "[PD-ROUTER] Response flow: Client → Gateway → Decode → Gateway → Client (direct return)"
+                                );
+                                
                                 let mut response = Response::new(Body::from(decode_body));
                                 *response.status_mut() = status;
                                 *response.headers_mut() = response_headers;
                                 response
                             }
                             Err(e) => {
-                                error!("Failed to read decode response: {}", e);
+                                error!("[PD-ROUTER] ERROR: Failed to read decode response: {}", e);
                                 error::internal_error(
                                     "read_response_failed",
                                     "Failed to read response",

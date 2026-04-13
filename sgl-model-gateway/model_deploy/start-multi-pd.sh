@@ -74,6 +74,9 @@ setsid python3 -m sglang.launch_server \
     --disaggregation-bootstrap-port $BOOTSTRAP_1_PORT \
     --host 127.0.0.1 \
     --context-length $CONTEXT_LENGTH \
+    --log-level debug \
+    --log-requests \
+    --log-requests-level 2 \
     > /tmp/sglang-prefill-1.log 2>&1 < /dev/null &
 
 # Start Prefill 2
@@ -87,6 +90,9 @@ setsid python3 -m sglang.launch_server \
     --disaggregation-bootstrap-port $BOOTSTRAP_2_PORT \
     --host 127.0.0.1 \
     --context-length $CONTEXT_LENGTH \
+    --log-level debug \
+    --log-requests \
+    --log-requests-level 2 \
     > /tmp/sglang-prefill-2.log 2>&1 < /dev/null &
 
 # Wait for Prefills
@@ -105,6 +111,9 @@ setsid python3 -m sglang.launch_server \
     --pd decode \
     --host 127.0.0.1 \
     --context-length $CONTEXT_LENGTH \
+    --log-level debug \
+    --log-requests \
+    --log-requests-level 2 \
     > /tmp/sglang-decode-1.log 2>&1 < /dev/null &
 
 # Start Decode 2
@@ -117,6 +126,9 @@ setsid python3 -m sglang.launch_server \
     --pd decode \
     --host 127.0.0.1 \
     --context-length $CONTEXT_LENGTH \
+    --log-level debug \
+    --log-requests \
+    --log-requests-level 2 \
     > /tmp/sglang-decode-2.log 2>&1 < /dev/null &
 
 # Wait for Decodes
