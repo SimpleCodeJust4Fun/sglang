@@ -1,0 +1,45 @@
+# 忽略临时文件和缓存
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+logs/
+
+# 模型文件和数据（太大不适合上传）
+*.safetensors
+*.bin
+*.gguf
+*.pth
+*.pt
+
+# 临时文件
+*.tmp
+*.bak
+*.deb
+miniconda.sh
+get-pip.py
+
+# SGLang 存储
+sglang_storage/
+
+# 缓存目录
+.cache/
