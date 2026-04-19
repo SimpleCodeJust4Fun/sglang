@@ -43,3 +43,14 @@ sglang_storage/
 
 # 缓存目录
 .cache/
+
+# Test results (temporary files)
+test-results/*.json
+test-results/*.log
+test-results/*.csv
+
+# Ignore Windows incompatible filenames
+nul
+con
+prn
+aux
