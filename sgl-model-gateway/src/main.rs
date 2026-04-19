@@ -146,7 +146,7 @@ struct CliArgs {
 
     // ==================== Routing Policy ====================
     /// Load balancing policy to use
-    #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "prefix_hash", "manual"], help_heading = "Routing Policy")]
+    #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "prefix_hash", "manual", "request_size_bucket", "performance_aware", "request_classification"], help_heading = "Routing Policy")]
     policy: String,
 
     /// Cache threshold (0.0-1.0) for cache-aware routing
@@ -203,11 +203,11 @@ struct CliArgs {
     decode: Vec<String>,
 
     /// Specific policy for prefill nodes in PD mode
-    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "prefix_hash", "manual"], help_heading = "PD Disaggregation")]
+    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "prefix_hash", "manual", "request_size_bucket", "performance_aware", "request_classification"], help_heading = "PD Disaggregation")]
     prefill_policy: Option<String>,
 
     /// Specific policy for decode nodes in PD mode
-    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "prefix_hash", "manual"], help_heading = "PD Disaggregation")]
+    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "prefix_hash", "manual", "request_size_bucket", "performance_aware", "request_classification"], help_heading = "PD Disaggregation")]
     decode_policy: Option<String>,
 
     /// Timeout in seconds for worker startup and registration
@@ -745,6 +745,25 @@ impl CliArgs {
                     "min_group" => ManualAssignmentMode::MinGroup,
                     other => panic!("Unknown assignment mode: {}", other),
                 },
+            },
+            "request_size_bucket" => PolicyConfig::RequestSizeBucket {
+                short_threshold: 100,
+                medium_threshold: 500,
+                track_load_per_bucket: true,
+            },
+            "performance_aware" => PolicyConfig::PerformanceAware {
+                weight_ttft: 0.3,
+                weight_tpot: 0.3,
+                weight_throughput: 0.4,
+                score_refresh_interval_secs: 60,
+                consider_load: true,
+            },
+            "request_classification" => PolicyConfig::RequestClassification {
+                short_input_threshold: 100,
+                medium_input_threshold: 500,
+                small_output_threshold: 100,
+                medium_output_threshold: 500,
+                auto_assign_workers: true,
             },
             _ => PolicyConfig::RoundRobin,
         }

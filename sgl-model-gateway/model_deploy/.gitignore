@@ -54,3 +54,14 @@ nul
 con
 prn
 aux
+
+# Test results (temporary files)
+test-results/*.json
+test-results/*.log
+test-results/*.csv
+
+# Ignore Windows incompatible filenames
+nul
+con
+prn
+aux

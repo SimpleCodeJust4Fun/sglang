@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use super::{
     BucketConfig, BucketPolicy, CacheAwareConfig, CacheAwarePolicy, ConsistentHashingPolicy,
-    LoadBalancingPolicy, ManualConfig, ManualPolicy, PowerOfTwoPolicy, PrefixHashConfig,
-    PrefixHashPolicy, RandomPolicy, RoundRobinPolicy,
+    LoadBalancingPolicy, ManualConfig, ManualPolicy, PerformanceAwareConfig, PerformanceAwarePolicy,
+    PowerOfTwoPolicy, PrefixHashConfig, PrefixHashPolicy, RandomPolicy, RequestClassificationConfig,
+    RequestClassificationPolicy, RequestSizeBucketConfig, RequestSizeBucketPolicy, RoundRobinPolicy,
 };
 use crate::config::PolicyConfig;
 
@@ -70,6 +71,50 @@ impl PolicyFactory {
                 };
                 Arc::new(PrefixHashPolicy::new(config))
             }
+            PolicyConfig::RequestSizeBucket {
+                short_threshold,
+                medium_threshold,
+                track_load_per_bucket,
+            } => {
+                let config = RequestSizeBucketConfig {
+                    short_threshold: *short_threshold,
+                    medium_threshold: *medium_threshold,
+                    track_load_per_bucket: *track_load_per_bucket,
+                };
+                Arc::new(RequestSizeBucketPolicy::with_config(config))
+            }
+            PolicyConfig::PerformanceAware {
+                weight_ttft,
+                weight_tpot,
+                weight_throughput,
+                score_refresh_interval_secs,
+                consider_load,
+            } => {
+                let config = PerformanceAwareConfig {
+                    weight_ttft: *weight_ttft,
+                    weight_tpot: *weight_tpot,
+                    weight_throughput: *weight_throughput,
+                    score_refresh_interval_secs: *score_refresh_interval_secs,
+                    consider_load: *consider_load,
+                };
+                Arc::new(PerformanceAwarePolicy::with_config(config))
+            }
+            PolicyConfig::RequestClassification {
+                short_input_threshold,
+                medium_input_threshold,
+                small_output_threshold,
+                medium_output_threshold,
+                auto_assign_workers,
+            } => {
+                let config = RequestClassificationConfig {
+                    short_input_threshold: *short_input_threshold,
+                    medium_input_threshold: *medium_input_threshold,
+                    small_output_threshold: *small_output_threshold,
+                    medium_output_threshold: *medium_output_threshold,
+                    auto_assign_workers: *auto_assign_workers,
+                };
+                Arc::new(RequestClassificationPolicy::with_config(config))
+            }
         }
     }
 
@@ -86,6 +131,15 @@ impl PolicyFactory {
                 Some(Arc::new(ConsistentHashingPolicy::new()))
             }
             "prefix_hash" | "prefixhash" => Some(Arc::new(PrefixHashPolicy::with_defaults())),
+            "request_size_bucket" | "requestsizebucket" => {
+                Some(Arc::new(RequestSizeBucketPolicy::new()))
+            }
+            "performance_aware" | "performanceaware" => {
+                Some(Arc::new(PerformanceAwarePolicy::new()))
+            }
+            "request_classification" | "requestclassification" => {
+                Some(Arc::new(RequestClassificationPolicy::new()))
+            }
             _ => None,
         }
     }

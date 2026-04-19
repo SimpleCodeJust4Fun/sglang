@@ -1,0 +1,7 @@
+{
+  "model": "qwen2.5-0.5b-instruct",
+  "messages": [
+    {"role": "user", "content": "Please write a comprehensive guide on how to build a distributed machine learning system. The guide should cover the following topics in detail: 1) Data parallelism vs model parallelism, 2) Parameter server architecture, 3) Ring-allreduce communication pattern, 4) Gradient accumulation and synchronization strategies, 5) Fault tolerance mechanisms, 6) Performance optimization techniques including mixed precision training and gradient compression, 7) Real-world deployment considerations such as network bandwidth, storage systems, and orchestration platforms like Kubernetes. Please provide code examples where appropriate and discuss trade-offs between different approaches."}
+  ],
+  "max_tokens": 500
+}

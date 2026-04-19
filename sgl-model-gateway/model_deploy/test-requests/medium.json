@@ -1,0 +1,7 @@
+{
+  "model": "qwen2.5-0.5b-instruct",
+  "messages": [
+    {"role": "user", "content": "What are the main differences between CPU, GPU, and TPU? Please explain the architecture and use cases for each type of processor in about 200-300 words."}
+  ],
+  "max_tokens": 200
+}

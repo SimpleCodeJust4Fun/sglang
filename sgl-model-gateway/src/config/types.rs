@@ -291,6 +291,68 @@ pub enum PolicyConfig {
         #[serde(default = "default_load_factor")]
         load_factor: f64,
     },
+
+    /// Request size bucket policy for heterogeneous GPU scheduling.
+    /// Classifies requests by input length and routes to different workers.
+    /// - Short requests (< short_threshold): Route to low-latency workers
+    /// - Medium requests (short_threshold..medium_threshold): Route to balanced workers
+    /// - Long requests (>= medium_threshold): Route to high-memory workers
+    #[serde(rename = "request_size_bucket")]
+    RequestSizeBucket {
+        /// Threshold for short requests in characters (default: 100)
+        #[serde(default = "default_short_threshold")]
+        short_threshold: usize,
+        /// Threshold for medium requests in characters (default: 500)
+        #[serde(default = "default_medium_threshold")]
+        medium_threshold: usize,
+        /// Whether to track load separately per bucket (default: true)
+        #[serde(default = "default_track_load_per_bucket")]
+        track_load_per_bucket: bool,
+    },
+
+    /// Performance-aware policy that considers worker metrics (TTFT, TPOT, throughput).
+    /// Maintains performance scores and routes to best-performing workers.
+    /// Ideal for heterogeneous GPU environments with different performance characteristics.
+    #[serde(rename = "performance_aware")]
+    PerformanceAware {
+        /// Weight for TTFT in scoring (default: 0.3)
+        #[serde(default = "default_weight_ttft")]
+        weight_ttft: f64,
+        /// Weight for TPOT in scoring (default: 0.3)
+        #[serde(default = "default_weight_tpot")]
+        weight_tpot: f64,
+        /// Weight for throughput in scoring (default: 0.4)
+        #[serde(default = "default_weight_throughput")]
+        weight_throughput: f64,
+        /// Score refresh interval in seconds (default: 60)
+        #[serde(default = "default_score_refresh_interval_secs")]
+        score_refresh_interval_secs: u64,
+        /// Whether to consider current load in scoring (default: true)
+        #[serde(default = "default_consider_load")]
+        consider_load: bool,
+    },
+
+    /// Request classification policy for intelligent routing based on multiple characteristics.
+    /// Classifies requests as compute-intensive, memory-intensive, or balanced.
+    /// Automatically assigns workers to categories based on their priority/cost ratio.
+    #[serde(rename = "request_classification")]
+    RequestClassification {
+        /// Threshold for short input in chars (default: 100)
+        #[serde(default = "default_short_input_threshold")]
+        short_input_threshold: usize,
+        /// Threshold for medium input in chars (default: 500)
+        #[serde(default = "default_medium_input_threshold")]
+        medium_input_threshold: usize,
+        /// Threshold for small output in tokens (default: 100)
+        #[serde(default = "default_small_output_threshold")]
+        small_output_threshold: usize,
+        /// Threshold for medium output in tokens (default: 500)
+        #[serde(default = "default_medium_output_threshold")]
+        medium_output_threshold: usize,
+        /// Whether to auto-assign workers based on priority/cost (default: true)
+        #[serde(default = "default_auto_assign_workers")]
+        auto_assign_workers: bool,
+    },
 }
 
 fn default_prefix_token_count() -> usize {
@@ -309,6 +371,61 @@ fn default_manual_max_idle_secs() -> u64 {
     4 * 3600
 }
 
+// RequestSizeBucket defaults
+fn default_short_threshold() -> usize {
+    100
+}
+
+fn default_medium_threshold() -> usize {
+    500
+}
+
+fn default_track_load_per_bucket() -> bool {
+    true
+}
+
+// PerformanceAware defaults
+fn default_weight_ttft() -> f64 {
+    0.3
+}
+
+fn default_weight_tpot() -> f64 {
+    0.3
+}
+
+fn default_weight_throughput() -> f64 {
+    0.4
+}
+
+fn default_score_refresh_interval_secs() -> u64 {
+    60
+}
+
+fn default_consider_load() -> bool {
+    true
+}
+
+// RequestClassification defaults
+fn default_short_input_threshold() -> usize {
+    100
+}
+
+fn default_medium_input_threshold() -> usize {
+    500
+}
+
+fn default_small_output_threshold() -> usize {
+    100
+}
+
+fn default_medium_output_threshold() -> usize {
+    500
+}
+
+fn default_auto_assign_workers() -> bool {
+    true
+}
+
 impl PolicyConfig {
     pub fn name(&self) -> &'static str {
         match self {
@@ -320,6 +437,9 @@ impl PolicyConfig {
             PolicyConfig::Manual { .. } => "manual",
             PolicyConfig::ConsistentHashing => "consistent_hashing",
             PolicyConfig::PrefixHash { .. } => "prefix_hash",
+            PolicyConfig::RequestSizeBucket { .. } => "request_size_bucket",
+            PolicyConfig::PerformanceAware { .. } => "performance_aware",
+            PolicyConfig::RequestClassification { .. } => "request_classification",
         }
     }
 }

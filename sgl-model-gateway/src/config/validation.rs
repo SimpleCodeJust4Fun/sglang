@@ -249,6 +249,93 @@ impl ConfigValidator {
                     });
                 }
             }
+            PolicyConfig::RequestSizeBucket {
+                short_threshold,
+                medium_threshold,
+                track_load_per_bucket: _,
+            } => {
+                if *short_threshold == 0 {
+                    return Err(ConfigError::InvalidValue {
+                        field: "short_threshold".to_string(),
+                        value: short_threshold.to_string(),
+                        reason: "Must be > 0".to_string(),
+                    });
+                }
+
+                if *medium_threshold <= *short_threshold {
+                    return Err(ConfigError::InvalidValue {
+                        field: "medium_threshold".to_string(),
+                        value: medium_threshold.to_string(),
+                        reason: "Must be > short_threshold".to_string(),
+                    });
+                }
+            }
+            PolicyConfig::PerformanceAware {
+                weight_ttft,
+                weight_tpot,
+                weight_throughput,
+                score_refresh_interval_secs,
+                consider_load: _,
+            } => {
+                let total_weight = *weight_ttft + *weight_tpot + *weight_throughput;
+                if (total_weight - 1.0).abs() > 0.001 {
+                    return Err(ConfigError::InvalidValue {
+                        field: "weights".to_string(),
+                        value: format!(
+                            "ttft={}, tpot={}, throughput={}",
+                            weight_ttft, weight_tpot, weight_throughput
+                        ),
+                        reason: "Sum of weights must equal 1.0".to_string(),
+                    });
+                }
+
+                if *score_refresh_interval_secs == 0 {
+                    return Err(ConfigError::InvalidValue {
+                        field: "score_refresh_interval_secs".to_string(),
+                        value: score_refresh_interval_secs.to_string(),
+                        reason: "Must be > 0".to_string(),
+                    });
+                }
+            }
+            PolicyConfig::RequestClassification {
+                short_input_threshold,
+                medium_input_threshold,
+                small_output_threshold,
+                medium_output_threshold,
+                auto_assign_workers: _,
+            } => {
+                if *short_input_threshold == 0 {
+                    return Err(ConfigError::InvalidValue {
+                        field: "short_input_threshold".to_string(),
+                        value: short_input_threshold.to_string(),
+                        reason: "Must be > 0".to_string(),
+                    });
+                }
+
+                if *medium_input_threshold <= *short_input_threshold {
+                    return Err(ConfigError::InvalidValue {
+                        field: "medium_input_threshold".to_string(),
+                        value: medium_input_threshold.to_string(),
+                        reason: "Must be > short_input_threshold".to_string(),
+                    });
+                }
+
+                if *small_output_threshold == 0 {
+                    return Err(ConfigError::InvalidValue {
+                        field: "small_output_threshold".to_string(),
+                        value: small_output_threshold.to_string(),
+                        reason: "Must be > 0".to_string(),
+                    });
+                }
+
+                if *medium_output_threshold <= *small_output_threshold {
+                    return Err(ConfigError::InvalidValue {
+                        field: "medium_output_threshold".to_string(),
+                        value: medium_output_threshold.to_string(),
+                        reason: "Must be > small_output_threshold".to_string(),
+                    });
+                }
+            }
         }
         Ok(())
     }

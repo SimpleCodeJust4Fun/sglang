@@ -550,10 +550,8 @@ impl PDRouter {
             request_id, context.route
         );
         debug!(
-            "[PD-ROUTER] Selected workers: prefill={} (port from url={}) decode={} (port from url={})",
-            prefill.id(),
+            "[PD-ROUTER] Selected workers: prefill={} decode={}",
             prefill.url(),
-            decode.id(),
             decode.url()
         );
         
