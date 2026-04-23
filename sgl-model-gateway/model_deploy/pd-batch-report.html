@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PD Batch Test Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .summary {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .summary h2 {
+            color: #34495e;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-card.success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+        
+        .stat-card.error {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+        
+        .stat-card.info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .chart-container h3 {
+            color: #34495e;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        .requests-section {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .requests-section h2 {
+            color: #34495e;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        .request-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        
+        .request-header {
+            background: #f8f9fa;
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        
+        .request-header:hover {
+            background: #e9ecef;
+        }
+        
+        .request-header.success {
+            border-left: 4px solid #28a745;
+        }
+        
+        .request-header.failed {
+            border-left: 4px solid #dc3545;
+        }
+        
+        .request-info {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .request-info span {
+            font-size: 0.9em;
+        }
+        
+        .request-info .label {
+            color: #6c757d;
+            font-weight: bold;
+        }
+        
+        .request-detail {
+            display: none;
+            padding: 15px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .request-detail.active {
+            display: block;
+        }
+        
+        .json-output {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+        
+        .timestamp {
+            text-align: center;
+            color: #7f8c8d;
+            margin-top: 30px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PD Batch Test Report</h1>
+        
+        <div class="summary">
+            <h2>Summary Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">10</div>
+                    <div class="stat-label">Total Requests</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-value">10</div>
+                    <div class="stat-label">Successful</div>
+                </div>
+                <div class="stat-card error">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+                <div class="stat-card info">
+                    <div class="stat-value">100.0%</div>
+                    <div class="stat-label">Success Rate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">0.35s</div>
+                    <div class="stat-label">Avg Duration</div>
+                </div>
+                <div class="stat-card info">
+                    <div class="stat-value">0.33s / 0.55s</div>
+                    <div class="stat-label">Min / Max Duration</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">36</div>
+                    <div class="stat-label">Avg Prompt Tokens</div>
+                </div>
+                <div class="stat-card info">
+                    <div class="stat-value">50</div>
+                    <div class="stat-label">Avg Completion Tokens</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="charts">
+            <div class="chart-container">
+                <h3>Prefill Worker Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="prefillChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Decode Worker Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="decodeChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Worker Pair Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="pairChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Request Duration Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="durationChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="requests-section">
+            <h2>Request Details</h2>
+            <p style="color: #7f8c8d; margin-bottom: 15px;">Click on a request to view its full JSON output</p>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(0)">
+                    <div class="request-info">
+                        <span><span class="label">#1</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-2</span>
+                        <span><span class="label">Decode:</span> decode-2</span>
+                        <span><span class="label">Duration:</span> 0.55s</span>
+                        <span><span class="label">Tokens:</span> 35 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-0">
+                    <div class="json-output"><pre>{
+  "request_id": "98a1c2f4783448d891002c22bb7cf8a7",
+  "gateway_request_id": "test-1776970466-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.550867,
+  "prompt_tokens": 35,
+  "completion_tokens": 50,
+  "content": "Python programming language is a high-level, interpreted programming language that was created by Guido van Rossum and first released in 1991. It was designed to be easy to learn and use, and it has since become one of the most",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970466-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:26",
+    "end_time": "18:54:26",
+    "latency_us": 540901,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30001",
+    "decode_url": "http://127.0.0.1:30011",
+    "prefill_name": "prefill-2",
+    "decode_name": "decode-2",
+    "bootstrap_room": "3684843166037063680"
+  },
+  "prefill": [
+    {
+      "rid": "99a603a575b9481494eb157fd3e2f036",
+      "log_file": "/tmp/sglang-prefill-2.log",
+      "timestamp": "18:54:20",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "3684843166037063680",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 9,
+      "prefill_cached_token": 26,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Python is a high-level, interpreted programming language developed by Guido van Rossum and first released in 1991. It is known for its simplicity, readability, and ease of use. Python is a versatile language that is often used for"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "98a1c2f4783448d891002c22bb7cf8a7",
+      "log_file": "/tmp/sglang-decode-2.log",
+      "timestamp": "18:54:12",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "3684843166037063680",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 55,
+      "decode_throughput": 2.66,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Python programming language is a high-level, interpreted programming language that was created by Guido van Rossum and first released in 1991. It was designed to be easy to learn and use, and it has since become one of the most"
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(1)">
+                    <div class="request-info">
+                        <span><span class="label">#2</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-1</span>
+                        <span><span class="label">Decode:</span> decode-1</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 36 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-1">
+                    <div class="json-output"><pre>{
+  "request_id": "904e332eac52409998df46d98a6c5855",
+  "gateway_request_id": "test-1776970466-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.332557,
+  "prompt_tokens": 36,
+  "completion_tokens": 50,
+  "content": "Machine learning is a subfield of artificial intelligence that focuses on developing algorithms and statistical models that enable computers to learn from and make predictions or decisions without being explicitly programmed. In simpler terms, it is a process where a computer system can learn from data and",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970466-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:26",
+    "end_time": "18:54:26",
+    "latency_us": 326060,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30000",
+    "decode_url": "http://127.0.0.1:30010",
+    "prefill_name": "prefill-1",
+    "decode_name": "decode-1",
+    "bootstrap_room": "8460133544024556919"
+  },
+  "prefill": [
+    {
+      "rid": "e722a23f996641c1bbc25089a3935de9",
+      "log_file": "/tmp/sglang-prefill-1.log",
+      "timestamp": "18:54:12",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "8460133544024556919",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 35,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Machine learning is a subset of artificial intelligence (AI) that involves the development of algorithms and statistical models that enable a computer program to learn from and make predictions or decisions based on data. The goal of machine learning is to enable computers to improve their performance"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "904e332eac52409998df46d98a6c5855",
+      "log_file": "/tmp/sglang-decode-1.log",
+      "timestamp": "18:54:20",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "8460133544024556919",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 78,
+      "decode_throughput": 161.73,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Machine learning is a subfield of artificial intelligence that focuses on developing algorithms and statistical models that enable computers to learn from and make predictions or decisions without being explicitly programmed. In simpler terms, it is a process where a computer system can learn from data and"
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(2)">
+                    <div class="request-info">
+                        <span><span class="label">#3</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-2</span>
+                        <span><span class="label">Decode:</span> decode-1</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 35 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-2">
+                    <div class="json-output"><pre>{
+  "request_id": "149e576af44844029f5ab0aa95ec5ac3",
+  "gateway_request_id": "test-1776970467-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.327835,
+  "prompt_tokens": 35,
+  "completion_tokens": 50,
+  "content": "The internet is a global network of interconnected computer networks that enable the sharing of information, ideas, and resources worldwide. Here's a basic overview of how the internet works:\n\n1. **Network Architecture**: The internet is composed of several layers, each with",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970467-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:27",
+    "end_time": "18:54:27",
+    "latency_us": 321261,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30001",
+    "decode_url": "http://127.0.0.1:30010",
+    "prefill_name": "prefill-2",
+    "decode_name": "decode-1",
+    "bootstrap_room": "8800314909591904373"
+  },
+  "prefill": [
+    {
+      "rid": "d609f834b9bd4f039057900c68c15c1d",
+      "log_file": "/tmp/sglang-prefill-2.log",
+      "timestamp": "18:54:26",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "8800314909591904373",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 34,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": null
+    }
+  ],
+  "decode": [
+    {
+      "rid": "149e576af44844029f5ab0aa95ec5ac3",
+      "log_file": "/tmp/sglang-decode-1.log",
+      "timestamp": "18:54:27",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "8800314909591904373",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 67,
+      "decode_throughput": 115.55,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": null
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(3)">
+                    <div class="request-info">
+                        <span><span class="label">#4</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-2</span>
+                        <span><span class="label">Decode:</span> decode-1</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 36 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-3">
+                    <div class="json-output"><pre>{
+  "request_id": "d7bcd28aca114b05889b06bed314c04e",
+  "gateway_request_id": "test-1776970467-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.331779,
+  "prompt_tokens": 36,
+  "completion_tokens": 50,
+  "content": "Exercise is a fundamental aspect of maintaining a healthy lifestyle, as it can help improve overall health, reduce the risk of chronic diseases, and enhance mental well-being. Here are some of the key benefits of exercise:\n\n1. **Improved Cardiovascular Health**:",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970467-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:27",
+    "end_time": "18:54:27",
+    "latency_us": 325193,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30001",
+    "decode_url": "http://127.0.0.1:30010",
+    "prefill_name": "prefill-2",
+    "decode_name": "decode-1",
+    "bootstrap_room": "6545858623738319954"
+  },
+  "prefill": [
+    {
+      "rid": "ec0cfbd4120246a49c47f871dfb7517d",
+      "log_file": "/tmp/sglang-prefill-2.log",
+      "timestamp": "18:54:27",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "6545858623738319954",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 9,
+      "prefill_cached_token": 27,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Exercise is a fundamental aspect of maintaining good health and well-being. Here are some of the key benefits of exercise:\\n\\n1. Improved Physical Health: Regular exercise helps to maintain and improve physical health by strengthening the cardiovascular system, improving flexibility and balance, and"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "d7bcd28aca114b05889b06bed314c04e",
+      "log_file": "/tmp/sglang-decode-1.log",
+      "timestamp": "18:54:27",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "6545858623738319954",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 58,
+      "decode_throughput": 111.4,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Exercise is a fundamental aspect of maintaining a healthy lifestyle, as it can help improve overall health, reduce the risk of chronic diseases, and enhance mental well-being. Here are some of the key benefits of exercise:\\n\\n1. **Improved Cardiovascular Health**:"
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(4)">
+                    <div class="request-info">
+                        <span><span class="label">#5</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-2</span>
+                        <span><span class="label">Decode:</span> decode-2</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 35 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-4">
+                    <div class="json-output"><pre>{
+  "request_id": "64a92cb8bee14072af4f7b75106dd965",
+  "gateway_request_id": "test-1776970468-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.328073,
+  "prompt_tokens": 35,
+  "completion_tokens": 50,
+  "content": "Photosynthesis is a process by which plants, algae, and some bacteria convert light energy, usually from the sun, into chemical energy stored in molecules such as glucose. Here's a simplified overview of the process:\n\n1. Light Absorption: Light energy",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970468-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:28",
+    "end_time": "18:54:28",
+    "latency_us": 321741,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30001",
+    "decode_url": "http://127.0.0.1:30011",
+    "prefill_name": "prefill-2",
+    "decode_name": "decode-2",
+    "bootstrap_room": "6348654653030931483"
+  },
+  "prefill": [
+    {
+      "rid": "9b5e9f001cc34b6198defb65f97dd6dc",
+      "log_file": "/tmp/sglang-prefill-2.log",
+      "timestamp": "18:54:28",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "6348654653030931483",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 34,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Photosynthesis is a process by which plants, algae, and some bacteria convert light energy, usually from the sun, into chemical energy stored in glucose. This process is essential for life on Earth, as it provides the energy that plants use to grow and"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "64a92cb8bee14072af4f7b75106dd965",
+      "log_file": "/tmp/sglang-decode-2.log",
+      "timestamp": "18:54:26",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "6348654653030931483",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 0,
+      "decode_throughput": 162.91,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": null
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(5)">
+                    <div class="request-info">
+                        <span><span class="label">#6</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-1</span>
+                        <span><span class="label">Decode:</span> decode-2</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 34 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-5">
+                    <div class="json-output"><pre>{
+  "request_id": "85462d627d594462bb0ff6cd39b4be67",
+  "gateway_request_id": "test-1776970468-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.332695,
+  "prompt_tokens": 34,
+  "completion_tokens": 50,
+  "content": "Artificial intelligence (AI) is a broad field of study that focuses on the development of computer systems that exhibit intelligent behavior. Here are some key points about AI:\n\n1. Definition: AI is a subset of computer science that deals with the development of",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970468-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:28",
+    "end_time": "18:54:28",
+    "latency_us": 326378,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30000",
+    "decode_url": "http://127.0.0.1:30011",
+    "prefill_name": "prefill-1",
+    "decode_name": "decode-2",
+    "bootstrap_room": "8601645278393472447"
+  },
+  "prefill": [
+    {
+      "rid": "21b0f6480f8a4b94ad5539859ba5a7a3",
+      "log_file": "/tmp/sglang-prefill-1.log",
+      "timestamp": "18:54:27",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "8601645278393472447",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 33,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Artificial intelligence (AI) is a broad field of study that encompasses a wide range of technologies, methods, and applications that enable machines to perform tasks that typically require human intelligence. Here are some key aspects of AI:\\n\\n1. **Machine Learning**:"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "85462d627d594462bb0ff6cd39b4be67",
+      "log_file": "/tmp/sglang-decode-2.log",
+      "timestamp": "18:54:28",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "8601645278393472447",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 74,
+      "decode_throughput": 112.47,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Artificial intelligence (AI) is a broad field of study that focuses on the development of computer systems that exhibit intelligent behavior. Here are some key points about AI:\\n\\n1. Definition: AI is a subset of computer science that deals with the development of"
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(6)">
+                    <div class="request-info">
+                        <span><span class="label">#7</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-1</span>
+                        <span><span class="label">Decode:</span> decode-2</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 37 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-6">
+                    <div class="json-output"><pre>{
+  "request_id": "361d18557a5a4925b118031411219664",
+  "gateway_request_id": "test-1776970469-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.331439,
+  "prompt_tokens": 37,
+  "completion_tokens": 50,
+  "content": "Writing a simple web application involves several steps, from setting up your development environment to deploying it. Below is a basic guide to help you get started with writing a simple web application using Python and Flask, a popular web framework.\n\n### Step 1:",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970469-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:29",
+    "end_time": "18:54:29",
+    "latency_us": 324916,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30000",
+    "decode_url": "http://127.0.0.1:30011",
+    "prefill_name": "prefill-1",
+    "decode_name": "decode-2",
+    "bootstrap_room": "1327248939373066377"
+  },
+  "prefill": [
+    {
+      "rid": "2fbe0f5e8a594c588fd523b13a4955a2",
+      "log_file": "/tmp/sglang-prefill-1.log",
+      "timestamp": "18:54:28",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "1327248939373066377",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 36,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Writing a simple web application involves several steps, including understanding the basics of web development, choosing a web framework, and building a basic structure. Below are the general steps you can follow to write a simple web application using Python and Flask:\\n\\n### 1"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "361d18557a5a4925b118031411219664",
+      "log_file": "/tmp/sglang-decode-2.log",
+      "timestamp": "18:54:28",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "1327248939373066377",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 67,
+      "decode_throughput": 113.87,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Writing a simple web application involves several steps, from setting up your development environment to deploying it. Below is a basic guide to help you get started with writing a simple web application using Python and Flask, a popular web framework.\\n\\n### Step 1:"
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(7)">
+                    <div class="request-info">
+                        <span><span class="label">#8</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-2</span>
+                        <span><span class="label">Decode:</span> decode-1</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 40 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-7">
+                    <div class="json-output"><pre>{
+  "request_id": "61d419391bdc4197be7e43b0155d611d",
+  "gateway_request_id": "test-1776970469-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.331143,
+  "prompt_tokens": 40,
+  "completion_tokens": 50,
+  "content": "SQL (Structured Query Language) and NoSQL (Non-SQL) databases are two different types of databases that serve different purposes and have different characteristics.\n\nSQL databases are relational databases that are designed to store and retrieve structured data. They are primarily used for",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970469-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:29",
+    "end_time": "18:54:29",
+    "latency_us": 324257,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30001",
+    "decode_url": "http://127.0.0.1:30010",
+    "prefill_name": "prefill-2",
+    "decode_name": "decode-1",
+    "bootstrap_room": "9198211331883569469"
+  },
+  "prefill": [
+    {
+      "rid": "1f707857fcfc434a9b2518cd48d11220",
+      "log_file": "/tmp/sglang-prefill-2.log",
+      "timestamp": "18:54:28",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "9198211331883569469",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 39,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "SQL (Structured Query Language) and NoSQL (Not Only SQL) databases are two different types of databases that are used to store and manage data. Here are some key differences between SQL and NoSQL databases:\\n\\n1. Data Model:\\n   - SQL"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "61d419391bdc4197be7e43b0155d611d",
+      "log_file": "/tmp/sglang-decode-1.log",
+      "timestamp": "18:54:28",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "9198211331883569469",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 52,
+      "decode_throughput": 24.92,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "SQL (Structured Query Language) and NoSQL (Non-SQL) databases are two different types of databases that serve different purposes and have different characteristics.\\n\\nSQL databases are relational databases that are designed to store and retrieve structured data. They are primarily used for"
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(8)">
+                    <div class="request-info">
+                        <span><span class="label">#9</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-1</span>
+                        <span><span class="label">Decode:</span> decode-1</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 36 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-8">
+                    <div class="json-output"><pre>{
+  "request_id": "f82cd3a1f21f4745806fe3cd721a3b76",
+  "gateway_request_id": "test-1776970469-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.33255,
+  "prompt_tokens": 36,
+  "completion_tokens": 50,
+  "content": "Quantum computing is a type of computing that uses quantum-mechanical phenomena, such as superposition and entanglement, to perform operations on data. Unlike classical computers, which use bits to store and process information, quantum computers use quantum bits,",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970469-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:29",
+    "end_time": "18:54:29",
+    "latency_us": 326083,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30000",
+    "decode_url": "http://127.0.0.1:30010",
+    "prefill_name": "prefill-1",
+    "decode_name": "decode-1",
+    "bootstrap_room": "5253170078387640312"
+  },
+  "prefill": [
+    {
+      "rid": "ca0d4aea25314789aab2f06e6740acc7",
+      "log_file": "/tmp/sglang-prefill-1.log",
+      "timestamp": "18:54:29",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "5253170078387640312",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 35,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Quantum computing is a type of computing that uses quantum mechanics to process information. In a traditional computer, information is stored and processed using bits, which can be either 0 or 1. In quantum computing, information is stored and processed using quantum"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "f82cd3a1f21f4745806fe3cd721a3b76",
+      "log_file": "/tmp/sglang-decode-1.log",
+      "timestamp": "18:54:29",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9000",
+      "bootstrap_room": "5253170078387640312",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 78,
+      "decode_throughput": 164.05,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Quantum computing is a type of computing that uses quantum-mechanical phenomena, such as superposition and entanglement, to perform operations on data. Unlike classical computers, which use bits to store and process information, quantum computers use quantum bits,"
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+            <div class="request-item">
+                <div class="request-header success" onclick="toggleRequest(9)">
+                    <div class="request-info">
+                        <span><span class="label">#10</span> ✓</span>
+                        <span><span class="label">Prefill:</span> prefill-2</span>
+                        <span><span class="label">Decode:</span> decode-2</span>
+                        <span><span class="label">Duration:</span> 0.33s</span>
+                        <span><span class="label">Tokens:</span> 38 → 50</span>
+                    </div>
+                </div>
+                <div class="request-detail" id="request-9">
+                    <div class="json-output"><pre>{
+  "request_id": "01b8ffbf7de3480e8db46b6b6af9abc6",
+  "gateway_request_id": "test-1776970470-0",
+  "success": true,
+  "status_code": 200,
+  "duration": 0.332197,
+  "prompt_tokens": 38,
+  "completion_tokens": 50,
+  "content": "Code review is an essential part of software development, helping to ensure that code meets the project's standards and adheres to best practices. Here are some best practices for effective code review:\n\n1. **Establish a Clear Code Review Process:**\n   -",
+  "error": null,
+  "gateway": {
+    "request_id": "test-1776970470-0",
+    "uri": "/v1/chat/completions",
+    "start_time": "18:54:30",
+    "end_time": "18:54:30",
+    "latency_us": 325710,
+    "status_code": 200,
+    "prefill_url": "http://127.0.0.1:30001",
+    "decode_url": "http://127.0.0.1:30011",
+    "prefill_name": "prefill-2",
+    "decode_name": "decode-2",
+    "bootstrap_room": "5994719152945043386"
+  },
+  "prefill": [
+    {
+      "rid": "02cb3193adfb4a07846e1457d9bf60ed",
+      "log_file": "/tmp/sglang-prefill-2.log",
+      "timestamp": "18:54:29",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "5994719152945043386",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "prefill_new_seq": 1,
+      "prefill_new_token": 1,
+      "prefill_cached_token": 37,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": "Code review is a critical step in software development, ensuring that code adheres to the coding standards, follows best practices, and is free of bugs. Here are some best practices for effective code review:\\n\\n1. **Review the Code**: Before the review"
+    }
+  ],
+  "decode": [
+    {
+      "rid": "01b8ffbf7de3480e8db46b6b6af9abc6",
+      "log_file": "/tmp/sglang-decode-2.log",
+      "timestamp": "18:54:29",
+      "bootstrap_host": "127.0.0.1",
+      "bootstrap_port": "9001",
+      "bootstrap_room": "5994719152945043386",
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "cached_tokens": null,
+      "e2e_latency": null,
+      "finish_reason": null,
+      "decode_running_req": 1,
+      "decode_token": 58,
+      "decode_throughput": 33.29,
+      "sampling_params": {
+        "temperature": 0.7,
+        "max_new_tokens": 50,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repetition_penalty": 1.1
+      },
+      "output_text": null
+    }
+  ]
+}</pre></div>
+                </div>
+            </div>
+
+        </div>
+        
+        <div class="timestamp">
+            Generated on 2026-04-24 02:54:30
+        </div>
+    </div>
+    
+    <script>
+        function toggleRequest(idx) {
+            const detail = document.getElementById('request-' + idx);
+            detail.classList.toggle('active');
+        }
+        
+        // Chart.js configuration
+        const colors = [
+            'rgba(255, 99, 132, 0.7)',
+            'rgba(54, 162, 235, 0.7)',
+            'rgba(255, 206, 86, 0.7)',
+            'rgba(75, 192, 192, 0.7)',
+            'rgba(153, 102, 255, 0.7)',
+            'rgba(255, 159, 64, 0.7)',
+            'rgba(199, 199, 199, 0.7)',
+            'rgba(83, 102, 255, 0.7)',
+        ];
+        
+        const borderColors = colors.map(c => c.replace('0.7', '1'));
+        
+        // Prefill Worker Chart
+        new Chart(document.getElementById('prefillChart'), {
+            type: 'pie',
+            data: {
+                labels: ["prefill-2", "prefill-1"],
+                datasets: [{
+                    data: [6, 4],
+                    backgroundColor: colors.slice(0, 2),
+                    borderColor: borderColors.slice(0, 2),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // Decode Worker Chart
+        new Chart(document.getElementById('decodeChart'), {
+            type: 'pie',
+            data: {
+                labels: ["decode-2", "decode-1"],
+                datasets: [{
+                    data: [5, 5],
+                    backgroundColor: colors.slice(0, 2),
+                    borderColor: borderColors.slice(0, 2),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // Worker Pair Chart
+        new Chart(document.getElementById('pairChart'), {
+            type: 'bar',
+            data: {
+                labels: ["prefill-2 \u2192 decode-2", "prefill-1 \u2192 decode-1", "prefill-2 \u2192 decode-1", "prefill-1 \u2192 decode-2"],
+                datasets: [{
+                    label: 'Request Count',
+                    data: [3, 2, 3, 2],
+                    backgroundColor: colors.slice(0, 4),
+                    borderColor: borderColors.slice(0, 4),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Duration Distribution Chart
+        const durations = [0.550867, 0.332557, 0.327835, 0.331779, 0.328073, 0.332695, 0.331439, 0.331143, 0.33255, 0.332197];
+        const bins = 10;
+        const minDur = Math.min(...durations);
+        const maxDur = Math.max(...durations);
+        const binWidth = (maxDur - minDur) / bins;
+        const histogram = new Array(bins).fill(0);
+        
+        durations.forEach(d => {
+            const binIdx = Math.min(Math.floor((d - minDur) / binWidth), bins - 1);
+            histogram[binIdx]++;
+        });
+        
+        const binLabels = [];
+        for (let i = 0; i < bins; i++) {
+            const start = minDur + i * binWidth;
+            const end = start + binWidth;
+            binLabels.push(`${start.toFixed(2)}s - ${end.toFixed(2)}s`);
+        }
+        
+        new Chart(document.getElementById('durationChart'), {
+            type: 'bar',
+            data: {
+                labels: binLabels,
+                datasets: [{
+                    label: 'Request Count',
+                    data: histogram,
+                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

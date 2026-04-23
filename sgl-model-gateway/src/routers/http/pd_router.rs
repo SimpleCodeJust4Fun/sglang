@@ -545,9 +545,15 @@ impl PDRouter {
             .map(|v| v.to_str().unwrap_or("unknown"))
             .unwrap_or("no-id");
         
+        // Extract bootstrap_room from the request JSON for log correlation
+        let bootstrap_room = json_request
+            .get("bootstrap_room")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        
         info!(
-            "[PD-ROUTER] request_id={} route={} prefill={} decode={}",
-            request_id, context.route, prefill.url(), decode.url()
+            "[PD-ROUTER] request_id={} route={} prefill={} decode={} bootstrap_room={}",
+            request_id, context.route, prefill.url(), decode.url(), bootstrap_room
         );
         
         // For non-streaming: use guard for automatic load management

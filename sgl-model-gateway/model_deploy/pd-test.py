@@ -247,6 +247,7 @@ class GatewayEntry:
     pd_router_events: list = field(default_factory=list)
     prefill_url: Optional[str] = None
     decode_url: Optional[str] = None
+    bootstrap_room: Optional[str] = None
 
 
 # ============================================================
@@ -431,6 +432,11 @@ def parse_gateway_log(filepath):
                         entries[req_id].prefill_url = prefill_match.group(1)
                     if decode_match:
                         entries[req_id].decode_url = decode_match.group(1)
+                    
+                    # Extract bootstrap_room
+                    br_match = re.search(r'bootstrap_room=(\d+)', event_text)
+                    if br_match:
+                        entries[req_id].bootstrap_room = br_match.group(1)
 
     return entries
 
@@ -593,8 +599,8 @@ def parse_sglang_log(filepath):
     return entries
 
 
-def correlate_by_request_id(gw_entries, prefill_entries, decode_entries, request_id, window_sec=5):
-    """Correlate logs by request_id and time window, returning only closest matches."""
+def correlate_by_request_id(gw_entries, prefill_entries, decode_entries, request_id, window_sec=5, prefill_logs=None, decode_logs=None):
+    """Correlate logs by request_id, gateway routing, and bootstrap_room, returning exact matches."""
     if request_id not in gw_entries:
         return None, [], []
 
@@ -605,39 +611,97 @@ def correlate_by_request_id(gw_entries, prefill_entries, decode_entries, request
     # Gateway logs are in UTC, SGLang logs are converted to UTC in parse_sglang_log.
     # Both should now be in UTC for comparison.
     
-    # Find candidates within window
+    # Determine which log files to search based on gateway routing info
+    expected_prefill_log = None
+    expected_decode_log = None
+    
+    if gw.prefill_url:
+        url = gw.prefill_url.rstrip('/')
+        # Map URL to expected log file
+        for log in (prefill_logs or []):
+            log_path = str(log)
+            # Try to match by port in URL
+            if ':30000' in url and 'prefill-1' in log_path:
+                expected_prefill_log = log_path
+                break
+            elif ':30001' in url and 'prefill-2' in log_path:
+                expected_prefill_log = log_path
+                break
+            elif 'prefill' in log_path and len(prefill_logs or []) == 1:
+                expected_prefill_log = log_path
+                break
+    
+    if gw.decode_url:
+        url = gw.decode_url.rstrip('/')
+        for log in (decode_logs or []):
+            log_path = str(log)
+            if ':30010' in url and 'decode-1' in log_path:
+                expected_decode_log = log_path
+                break
+            elif ':30011' in url and 'decode-2' in log_path:
+                expected_decode_log = log_path
+                break
+            elif 'decode' in log_path and len(decode_logs or []) == 1:
+                expected_decode_log = log_path
+                break
+    
+    # Filter entries by expected log files first
     prefill_candidates = []
     decode_candidates = []
-
+    
     for rid, pf in prefill_entries.items():
         if pf.is_health_check:
             continue
-        if pf.timestamp:
+        if pf.timestamp and pf.bootstrap_room:
+            # Check if this entry is from the expected log file
+            if expected_prefill_log and pf.log_file != expected_prefill_log:
+                continue
             diff = abs((pf.timestamp - gw.start_time).total_seconds())
             if diff <= window_sec:
                 prefill_candidates.append((diff, pf))
-
+    
     for rid, dc in decode_entries.items():
         if dc.is_health_check:
             continue
-        if dc.timestamp:
+        if dc.timestamp and dc.bootstrap_room:
+            # Check if this entry is from the expected log file
+            if expected_decode_log and dc.log_file != expected_decode_log:
+                continue
             diff = abs((dc.timestamp - gw.start_time).total_seconds())
             if diff <= window_sec:
                 decode_candidates.append((diff, dc))
     
-    # Sort by time difference and take only the closest
+    if not prefill_candidates or not decode_candidates:
+        return gw, [], []
+    
+    # Sort by time difference
+    prefill_candidates.sort(key=lambda x: x[0])
+    decode_candidates.sort(key=lambda x: x[0])
+    
+    # If Gateway has bootstrap_room, use it for exact matching
     matched_prefill = []
     matched_decode = []
     
-    if prefill_candidates:
-        prefill_candidates.sort(key=lambda x: x[0])
-        closest_time = prefill_candidates[0][0]
-        matched_prefill = [pf for diff, pf in prefill_candidates if abs(diff - closest_time) <= 1.0]
-
-    if decode_candidates:
-        decode_candidates.sort(key=lambda x: x[0])
-        closest_time = decode_candidates[0][0]
-        matched_decode = [dc for diff, dc in decode_candidates if abs(diff - closest_time) <= 1.0]
+    if gw.bootstrap_room:
+        # Use Gateway's bootstrap_room for exact matching
+        for diff, pf in prefill_candidates:
+            if pf.bootstrap_room == gw.bootstrap_room:
+                # Found matching prefill, now find decode with same bootstrap_room
+                for diff2, dc in decode_candidates:
+                    if dc.bootstrap_room == gw.bootstrap_room:
+                        matched_prefill.append(pf)
+                        matched_decode.append(dc)
+                        break
+                if matched_prefill:
+                    break
+    else:
+        # Fallback: use prefill-decode bootstrap_room matching
+        best_decode = decode_candidates[0][1]
+        for diff, pf in prefill_candidates:
+            if pf.bootstrap_room == best_decode.bootstrap_room:
+                matched_prefill.append(pf)
+                matched_decode.append(best_decode)
+                break
 
     return gw, matched_prefill, matched_decode
 
@@ -870,6 +934,86 @@ def print_log_trace(gw_entry, prefill_matches, decode_matches, verbose=False, re
 
 
 # ============================================================
+# JSON Output Module
+# ============================================================
+
+def build_json_result(result, gw_match, pf_matches, dc_matches, verbose=False):
+    """Build a JSON-serializable result dict."""
+    entry = {
+        'request_id': result.get('request_id'),
+        'gateway_request_id': result.get('gateway_request_id'),
+        'success': result.get('success', False),
+        'status_code': result.get('status_code'),
+        'duration': result.get('duration'),
+        'prompt_tokens': result.get('prompt_tokens', 0),
+        'completion_tokens': result.get('completion_tokens', 0),
+        'content': result.get('content', ''),
+        'error': result.get('error'),
+    }
+    
+    if gw_match:
+        entry['gateway'] = {
+            'request_id': gw_match.request_id,
+            'uri': gw_match.uri,
+            'start_time': format_time(gw_match.start_time),
+            'end_time': format_time(gw_match.end_time),
+            'latency_us': gw_match.latency_us,
+            'status_code': gw_match.status_code,
+            'prefill_url': gw_match.prefill_url,
+            'decode_url': gw_match.decode_url,
+            'prefill_name': url_to_worker_name(gw_match.prefill_url),
+            'decode_name': url_to_worker_name(gw_match.decode_url),
+            'bootstrap_room': gw_match.bootstrap_room,
+        }
+    
+    entry['prefill'] = []
+    for pf in pf_matches:
+        pf_entry = {
+            'rid': pf.rid,
+            'log_file': pf.log_file,
+            'timestamp': format_time(pf.timestamp),
+            'bootstrap_host': pf.bootstrap_host,
+            'bootstrap_port': pf.bootstrap_port,
+            'bootstrap_room': pf.bootstrap_room,
+            'prompt_tokens': pf.prompt_tokens,
+            'completion_tokens': pf.completion_tokens,
+            'cached_tokens': pf.cached_tokens,
+            'e2e_latency': pf.e2e_latency,
+            'finish_reason': pf.finish_reason,
+            'prefill_new_seq': pf.prefill_new_seq,
+            'prefill_new_token': pf.prefill_new_token,
+            'prefill_cached_token': pf.prefill_cached_token,
+            'sampling_params': pf.sampling_params,
+            'output_text': pf.output_text or pf.text,
+        }
+        entry['prefill'].append(pf_entry)
+    
+    entry['decode'] = []
+    for dc in dc_matches:
+        dc_entry = {
+            'rid': dc.rid,
+            'log_file': dc.log_file,
+            'timestamp': format_time(dc.timestamp),
+            'bootstrap_host': dc.bootstrap_host,
+            'bootstrap_port': dc.bootstrap_port,
+            'bootstrap_room': dc.bootstrap_room,
+            'prompt_tokens': dc.prompt_tokens,
+            'completion_tokens': dc.completion_tokens,
+            'cached_tokens': dc.cached_tokens,
+            'e2e_latency': dc.e2e_latency,
+            'finish_reason': dc.finish_reason,
+            'decode_running_req': dc.decode_running_req,
+            'decode_token': dc.decode_token,
+            'decode_throughput': dc.decode_throughput,
+            'sampling_params': dc.sampling_params,
+            'output_text': dc.output_text or dc.text,
+        }
+        entry['decode'].append(dc_entry)
+    
+    return entry
+
+
+# ============================================================
 # Main
 # ============================================================
 
@@ -892,12 +1036,17 @@ def main():
     parser.add_argument('--no-response', action='store_true', help='Skip showing response content')
     parser.add_argument('--tail', type=int, default=0, help='Show last N lines of each log after request (for debugging)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show detailed information including bootstrap room mapping, timing breakdown, and full request/response text')
+    parser.add_argument('--json', '-j', action='store_true', help='Output results in JSON format (for programmatic use)')
     args = parser.parse_args()
 
     # Get prompt
     prompt = args.prompt or args.prompt_opt
     if not prompt and not args.file:
-        parser.print_help()
+        if args.json:
+            # In JSON mode, output empty array instead of help
+            print(json.dumps([]))
+        else:
+            parser.print_help()
         return
 
     # Resolve log paths - auto-discover log files
@@ -962,39 +1111,50 @@ def main():
         prompts = [prompt] * args.concurrent
 
     if not prompts:
-        print(f"{C.RED}No prompts to process{C.RESET}")
+        if args.json:
+            print(json.dumps([]))
+        else:
+            print(f"{C.RED}No prompts to process{C.RESET}")
         return
 
     # Parse startup log to build URL-to-name mapping
     startup_log = '/tmp/pd-startup.log'
     parse_startup_log(startup_log)
 
-    print(f"{C.BOLD}{C.CYAN}PD Test & Log Trace Tool{C.RESET}")
-    print(f"{C.DIM}Gateway: {args.gateway_url} | Model: {args.model}{C.RESET}")
+    # In JSON mode, suppress normal output
+    if not args.json:
+        print(f"{C.BOLD}{C.CYAN}PD Test & Log Trace Tool{C.RESET}")
+        print(f"{C.DIM}Gateway: {args.gateway_url} | Model: {args.model}{C.RESET}")
 
-    # Show log file details
-    gw_path = Path(gateway_log)
-    gw_size = gw_path.stat().st_size if gw_path.exists() else 0
-    gw_status = f"{gw_size/1024:.1f}KB" if gw_size > 0 else f"{C.RED}NOT FOUND{C.RESET}"
-    print(f"{C.DIM}Gateway log: {gateway_log} ({gw_status}){C.RESET}")
+        # Show log file details
+        gw_path = Path(gateway_log)
+        gw_size = gw_path.stat().st_size if gw_path.exists() else 0
+        gw_status = f"{gw_size/1024:.1f}KB" if gw_size > 0 else f"{C.RED}NOT FOUND{C.RESET}"
+        print(f"{C.DIM}Gateway log: {gateway_log} ({gw_status}){C.RESET}")
 
-    for p in prefill_logs:
-        p_path = Path(p)
-        p_size = p_path.stat().st_size if p_path.exists() else 0
-        p_status = f"{p_size/1024:.1f}KB" if p_size > 0 else f"{C.RED}EMPTY{C.RESET}"
-        print(f"{C.DIM}Prefill log: {p} ({p_status}){C.RESET}")
+        for p in prefill_logs:
+            p_path = Path(p)
+            p_size = p_path.stat().st_size if p_path.exists() else 0
+            p_status = f"{p_size/1024:.1f}KB" if p_size > 0 else f"{C.RED}EMPTY{C.RESET}"
+            print(f"{C.DIM}Prefill log: {p} ({p_status}){C.RESET}")
 
-    for d in decode_logs:
-        d_path = Path(d)
-        d_size = d_path.stat().st_size if d_path.exists() else 0
-        d_status = f"{d_size/1024:.1f}KB" if d_size > 0 else f"{C.RED}EMPTY{C.RESET}"
-        print(f"{C.DIM}Decode log:  {d} ({d_status}){C.RESET}")
-    print()
+        for d in decode_logs:
+            d_path = Path(d)
+            d_size = d_path.stat().st_size if d_path.exists() else 0
+            d_status = f"{d_size/1024:.1f}KB" if d_size > 0 else f"{C.RED}EMPTY{C.RESET}"
+            print(f"{C.DIM}Decode log:  {d} ({d_status}){C.RESET}")
+        print()
+
+    # Initialize JSON results collection
+    json_results = []
 
     # Process each prompt
     for i, p in enumerate(prompts):
         request_id = f"test-{int(time.time())}-{i}"
-        print(f"{C.BOLD}{C.YELLOW}[{i+1}/{len(prompts)}] Sending request: {p[:50]}{'...' if len(p) > 50 else ''}{C.RESET}")
+        
+        # Only print progress in non-JSON mode
+        if not args.json:
+            print(f"{C.BOLD}{C.YELLOW}[{i+1}/{len(prompts)}] Sending request: {p[:50]}{'...' if len(p) > 50 else ''}{C.RESET}")
 
         # Send request
         result = send_request_with_request_id(
@@ -1003,13 +1163,18 @@ def main():
         )
 
         # Display HTTP result
-        if not args.no_response:
-            print_test_result(result)
-        else:
-            status = f"{C.GREEN}OK{C.RESET}" if result["success"] else f"{C.RED}FAIL{C.RESET}"
-            print(f"  {C.CYAN}Status:{C.RESET} {status}, {C.CYAN}Duration:{C.RESET} {result['duration']:.2f}s")
+        if not args.json:
+            if not args.no_response:
+                print_test_result(result)
+            else:
+                status = f"{C.GREEN}OK{C.RESET}" if result["success"] else f"{C.RED}FAIL{C.RESET}"
+                print(f"  {C.CYAN}Status:{C.RESET} {status}, {C.CYAN}Duration:{C.RESET} {result['duration']:.2f}s")
 
         # Trace logs
+        gw_match = None
+        pf_matches = []
+        dc_matches = []
+        
         if not args.no_trace:
             # Re-parse logs for each request (to get latest)
             gw_entries = parse_gateway_log(gateway_log)
@@ -1025,7 +1190,8 @@ def main():
             # Try to correlate by gateway request_id (from response header)
             gw_req_id = result.get('gateway_request_id', result.get('request_id', request_id))
             gw_match, pf_matches, dc_matches = correlate_by_request_id(
-                gw_entries, pf_entries, dc_entries, gw_req_id, args.window
+                gw_entries, pf_entries, dc_entries, gw_req_id, args.window,
+                prefill_logs=prefill_logs, decode_logs=decode_logs
             )
 
             # Fall back to response body request_id
@@ -1033,7 +1199,8 @@ def main():
                 body_req_id = result.get('request_id', request_id)
                 if body_req_id != gw_req_id:
                     gw_match, pf_matches, dc_matches = correlate_by_request_id(
-                        gw_entries, pf_entries, dc_entries, body_req_id, args.window
+                        gw_entries, pf_entries, dc_entries, body_req_id, args.window,
+                        prefill_logs=prefill_logs, decode_logs=decode_logs
                     )
 
             # Fall back to time-based correlation
@@ -1047,53 +1214,76 @@ def main():
                         gw_match = gw
                         break
 
-            if gw_match:
-                print_log_trace(gw_match, pf_matches, dc_matches, 
-                               verbose=args.verbose, 
-                               response_id=result.get('request_id'))
-            else:
-                print(f"\n  {C.YELLOW}No Gateway log entry found for this request{C.RESET}")
-                # Show diagnostic info
-                if gw_entries:
-                    print(f"  {C.DIM}(Found {len(gw_entries)} gateway entries, but none matched by time window){C.RESET}")
-                    print(f"  {C.DIM}Gateway entries found: {list(gw_entries.keys())[:5]}{'...' if len(gw_entries) > 5 else ''}{C.RESET}")
+            if not args.json:
+                if gw_match:
+                    print_log_trace(gw_match, pf_matches, dc_matches, 
+                                   verbose=args.verbose, 
+                                   response_id=result.get('request_id'))
                 else:
-                    print(f"  {C.DIM}(Gateway log parsed but contains 0 request entries){C.RESET}")
-                    if Path(gateway_log).exists():
-                        print(f"  {C.DIM}Last 5 lines of {gateway_log}:{C.RESET}")
-                        try:
-                            with open(gateway_log, 'r') as f:
-                                lines = f.readlines()
-                                for line in lines[-5:]:
-                                    print(f"    {C.DIM}{line.rstrip()}{C.RESET}")
-                        except Exception:
-                            pass
+                    print(f"\n  {C.YELLOW}No Gateway log entry found for this request{C.RESET}")
+                    # Show diagnostic info
+                    if gw_entries:
+                        print(f"  {C.DIM}(Found {len(gw_entries)} gateway entries, but none matched by time window){C.RESET}")
+                        print(f"  {C.DIM}Gateway entries found: {list(gw_entries.keys())[:5]}{'...' if len(gw_entries) > 5 else ''}{C.RESET}")
                     else:
-                        print(f"  {C.DIM}Gateway log file does not exist: {gateway_log}{C.RESET}")
-                print(f"  {C.DIM}Prefill entries: {len(pf_entries)}, Decode entries: {len(dc_entries)}{C.RESET}")
+                        print(f"  {C.DIM}(Gateway log parsed but contains 0 request entries){C.RESET}")
+                        if Path(gateway_log).exists():
+                            print(f"  {C.DIM}Last 5 lines of {gateway_log}:{C.RESET}")
+                            try:
+                                with open(gateway_log, 'r') as f:
+                                    lines = f.readlines()
+                                    for line in lines[-5:]:
+                                        print(f"    {C.DIM}{line.rstrip()}{C.RESET}")
+                            except Exception:
+                                pass
+                        else:
+                            print(f"  {C.DIM}Gateway log file does not exist: {gateway_log}{C.RESET}")
+                    print(f"  {C.DIM}Prefill entries: {len(pf_entries)}, Decode entries: {len(dc_entries)}{C.RESET}")
+                    print()
+        else:
+            # In --no-trace mode, still try to get gateway routing info from logs
+            gw_entries = parse_gateway_log(gateway_log)
+            gw_req_id = result.get('gateway_request_id', result.get('request_id', request_id))
+            
+            # Try to find gateway entry by request_id
+            if gw_req_id in gw_entries:
+                gw_match = gw_entries[gw_req_id]
+            else:
+                # Fall back to time-based correlation
+                for gwid, gw in gw_entries.items():
+                    if gw.start_time and abs((gw.start_time - local_to_utc(result['start_time'])).total_seconds()) <= args.window:
+                        gw_match = gw
+                        break
+
+        # Store JSON result if in JSON mode
+        if args.json:
+            json_results.append(build_json_result(result, gw_match, pf_matches, dc_matches, args.verbose))
+        else:
+            # Show raw log tail if requested (only in non-JSON mode)
+            if args.tail > 0:
+                print(f"\n{C.DIM}-- Raw Log Tail (last {args.tail} lines) --{C.RESET}")
+                for label, log_path in [('Gateway', gateway_log)] + \
+                                       [(f'Prefill-{j}', lp) for j, lp in enumerate(prefill_logs, 1)] + \
+                                       [(f'Decode-{j}', lp) for j, lp in enumerate(decode_logs, 1)]:
+                    if Path(log_path).exists():
+                        print(f"\n{C.BOLD}{C.CYAN}[{label}]{C.RESET}")
+                        try:
+                            with open(log_path, 'r') as f:
+                                lines = f.readlines()
+                                for line in lines[-args.tail:]:
+                                    print(f"  {C.DIM}{line.rstrip()}{C.RESET}")
+                        except Exception as e:
+                            print(f"  {C.RED}Error reading: {e}{C.RESET}")
                 print()
 
-        # Show raw log tail if requested
-        if args.tail > 0:
-            print(f"\n{C.DIM}-- Raw Log Tail (last {args.tail} lines) --{C.RESET}")
-            for label, log_path in [('Gateway', gateway_log)] + \
-                                   [(f'Prefill-{j}', lp) for j, lp in enumerate(prefill_logs, 1)] + \
-                                   [(f'Decode-{j}', lp) for j, lp in enumerate(decode_logs, 1)]:
-                if Path(log_path).exists():
-                    print(f"\n{C.BOLD}{C.CYAN}[{label}]{C.RESET}")
-                    try:
-                        with open(log_path, 'r') as f:
-                            lines = f.readlines()
-                            for line in lines[-args.tail:]:
-                                print(f"  {C.DIM}{line.rstrip()}{C.RESET}")
-                    except Exception as e:
-                        print(f"  {C.RED}Error reading: {e}{C.RESET}")
-            print()
+            if i < len(prompts) - 1:
+                print()
 
-        if i < len(prompts) - 1:
-            print()
-
-    print(f"\n{C.GREEN}Test complete. Processed {len(prompts)} request(s).{C.RESET}")
+    # Output JSON results
+    if args.json:
+        print(json.dumps(json_results, indent=2))
+    else:
+        print(f"\n{C.GREEN}Test complete. Processed {len(prompts)} request(s).{C.RESET}")
 
 
 if __name__ == '__main__':
