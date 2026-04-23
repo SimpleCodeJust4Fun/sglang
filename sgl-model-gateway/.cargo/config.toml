@@ -1,6 +1,18 @@
 [build]
 rustflags = []
 incremental = true
+jobs = 16  # 使用 16 个并行编译任务，避免系统卡死
+
+# 优化编译速度，减少调试信息生成
+[profile.dev]
+opt-level = 1
+debug = false
+incremental = true
+
+[profile.release]
+opt-level = 2
+lto = false
+incremental = true
 
 [target.aarch64-apple-darwin]
 rustflags = [

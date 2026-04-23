@@ -13,7 +13,7 @@ use reqwest::Client;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use super::pd_types::api_path;
 use crate::{
@@ -545,14 +545,9 @@ impl PDRouter {
             .map(|v| v.to_str().unwrap_or("unknown"))
             .unwrap_or("no-id");
         
-        debug!(
-            "[PD-ROUTER] ===== REQUEST START ===== request_id={} route={}",
-            request_id, context.route
-        );
-        debug!(
-            "[PD-ROUTER] Selected workers: prefill={} decode={}",
-            prefill.url(),
-            decode.url()
+        info!(
+            "[PD-ROUTER] request_id={} route={} prefill={} decode={}",
+            request_id, context.route, prefill.url(), decode.url()
         );
         
         // For non-streaming: use guard for automatic load management
