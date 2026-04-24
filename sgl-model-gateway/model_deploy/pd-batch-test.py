@@ -654,6 +654,8 @@ def main():
                        help='Max tokens to generate')
     parser.add_argument('--output', '-o', default='pd-batch-report.html',
                        help='Output HTML report file')
+    parser.add_argument('--json-output', '-j', default=None,
+                       help='Output JSON data file (optional)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Verbose output')
     args = parser.parse_args()
@@ -746,6 +748,30 @@ def main():
     print(f"\n{C.BOLD}{C.GREEN}Generating HTML report...{C.RESET}")
     output_file = generate_html_report(stats, args.output)
     print(f"{C.GREEN}Report saved to: {output_file}{C.RESET}")
+    
+    # Generate JSON output if requested
+    if args.json_output:
+        import json
+        json_data = {
+            'summary': {
+                'total_requests': stats['total_requests'],
+                'successful': stats['successful'],
+                'failed': stats['failed'],
+                'success_rate': round(stats['successful'] / stats['total_requests'] * 100, 2) if stats['total_requests'] > 0 else 0,
+                'avg_duration': round(sum(stats['durations']) / len(stats['durations']), 4) if stats['durations'] else 0,
+                'min_duration': round(min(stats['durations']), 4) if stats['durations'] else 0,
+                'max_duration': round(max(stats['durations']), 4) if stats['durations'] else 0,
+                'avg_prompt_tokens': round(sum(stats['prompt_tokens']) / len(stats['prompt_tokens']), 2) if stats['prompt_tokens'] else 0,
+                'avg_completion_tokens': round(sum(stats['completion_tokens']) / len(stats['completion_tokens']), 2) if stats['completion_tokens'] else 0,
+            },
+            'prefill_distribution': dict(stats['prefill_distribution']),
+            'decode_distribution': dict(stats['decode_distribution']),
+            'worker_pairs': dict(stats['worker_pairs']),
+            'requests': stats['requests_detail'],
+        }
+        with open(args.json_output, 'w') as f:
+            json.dump(json_data, f, indent=2)
+        print(f"{C.GREEN}JSON saved to: {args.json_output}{C.RESET}")
 
 
 if __name__ == '__main__':

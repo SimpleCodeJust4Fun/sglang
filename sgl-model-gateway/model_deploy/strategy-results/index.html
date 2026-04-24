@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PD调度策略测试报告</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            padding: 30px;
+        }
+        .container { max-width: 1600px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .card .value { font-size: 2em; font-weight: bold; color: #3498db; }
+        .card .label { color: #7f8c8d; font-size: 0.9em; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        th {
+            background: #3498db;
+            color: white;
+            padding: 12px 10px;
+            text-align: left;
+            font-size: 0.85em;
+        }
+        td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.85em;
+        }
+        tr:hover { background: #f8f9fa; }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            color: white;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .json-link { color: #28a745; font-weight: bold; }
+        .timestamp {
+            text-align: center;
+            color: #7f8c8d;
+            margin-top: 20px;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PD调度策略测试报告</h1>
+        <p class="subtitle">每个策略 100 条请求 | 8种策略对比分析</p>
+        
+        <div class="summary-cards">
+            <div class="card">
+                <div class="value">8</div>
+                <div class="label">测试策略数</div>
+            </div>
+            <div class="card">
+                <div class="value">100</div>
+                <div class="label">每策略请求数</div>
+            </div>
+            <div class="card">
+                <div class="value">800</div>
+                <div class="label">总请求数</div>
+            </div>
+            <div class="card">
+                <div class="value">8</div>
+                <div class="label">通过策略数</div>
+            </div>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>策略名称</th>
+                    <th>策略说明</th>
+                    <th>状态</th>
+                    <th>请求数</th>
+                    <th>成功率</th>
+                    <th>平均延迟</th>
+                    <th>Prefill分布</th>
+                    <th>Decode分布</th>
+                    <th>Worker对</th>
+                    <th>数据</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+            <tr>
+                <td><a href="round_robin/pd-batch-report.html">round_robin</a></td>
+                <td>轮询策略：按固定顺序循环分配请求，确保均匀分布</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.297s</td>
+                <td>prefill-1:50, prefill-2:50</td>
+                <td>decode-2:50, decode-1:50</td>
+                <td>prefill-1 → decode-2:50, prefill-2 → decode-1:50</td>
+                <td><a href="round_robin/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            <tr>
+                <td><a href="random/pd-batch-report.html">random</a></td>
+                <td>随机策略：随机选择worker，大致均衡但有波动</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.297s</td>
+                <td>prefill-2:50, prefill-1:50</td>
+                <td>decode-2:50, decode-1:50</td>
+                <td>prefill-2 → decode-2:28, prefill-1 → decode-1:28, prefill-1 → decode-2:22, prefill-2 → decode-1:22</td>
+                <td><a href="random/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            <tr>
+                <td><a href="power_of_two/pd-batch-report.html">power_of_two</a></td>
+                <td>随机二选一：随机选2个worker，选负载较低的</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.299s</td>
+                <td>prefill-2:60, prefill-1:40</td>
+                <td>decode-1:37, decode-2:63</td>
+                <td>prefill-2 → decode-1:12, prefill-1 → decode-2:15, prefill-1 → decode-1:25, prefill-2 → decode-2:48</td>
+                <td><a href="power_of_two/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            <tr>
+                <td><a href="cache_aware/pd-batch-report.html">cache_aware</a></td>
+                <td>缓存感知：根据KV Cache前缀匹配路由</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.299s</td>
+                <td>prefill-1:52, prefill-2:48</td>
+                <td>decode-2:53, decode-1:47</td>
+                <td>prefill-1 → decode-2:28, prefill-1 → decode-1:24, prefill-2 → decode-1:23, prefill-2 → decode-2:25</td>
+                <td><a href="cache_aware/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            <tr>
+                <td><a href="prefix_hash/pd-batch-report.html">prefix_hash</a></td>
+                <td>前缀哈希：基于请求内容哈希路由</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.422s</td>
+                <td>unknown:100</td>
+                <td>unknown:100</td>
+                <td>unknown → unknown:100</td>
+                <td><a href="prefix_hash/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            <tr>
+                <td><a href="request_size_bucket/pd-batch-report.html">request_size_bucket</a></td>
+                <td>请求长度分桶：按prompt长度路由到不同worker</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.300s</td>
+                <td>prefill-1:100</td>
+                <td>decode-2:100</td>
+                <td>prefill-1 → decode-2:100</td>
+                <td><a href="request_size_bucket/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            <tr>
+                <td><a href="performance_aware/pd-batch-report.html">performance_aware</a></td>
+                <td>性能感知：选择性能指标最优的worker</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.298s</td>
+                <td>prefill-1:100</td>
+                <td>decode-2:100</td>
+                <td>prefill-1 → decode-2:100</td>
+                <td><a href="performance_aware/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            <tr>
+                <td><a href="request_classification/pd-batch-report.html">request_classification</a></td>
+                <td>请求分类：按请求类型分类路由</td>
+                <td><span class="badge" style="background:#28a745">PASS</span></td>
+                <td>100</td>
+                <td>100.0%</td>
+                <td>0.297s</td>
+                <td>prefill-1:100</td>
+                <td>decode-2:100</td>
+                <td>prefill-1 → decode-2:100</td>
+                <td><a href="request_classification/pd-batch-data.json" class="json-link">JSON</a></td>
+            </tr>
+            </tbody>
+        </table>
+        
+        <p class="timestamp">生成时间: 2026-04-24 03:16:12</p>
+    </div>
+</body>
+</html>
