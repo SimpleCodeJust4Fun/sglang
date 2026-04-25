@@ -12,9 +12,9 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-MODELSCOPE_URL="https://modelscope.cn/models/Qwen/Qwen3-0.6B-MLX-4bit"
-MODEL_NAME="Qwen3-0.6B-MLX-4bit"
-MODEL_DIR="/home/tyliu/.cache/modelscope/hub/models/qwen/Qwen3-0___6B-MLX-4bit"
+MODELSCOPE_URL="https://modelscope.cn/models/Qwen/Qwen3-0.6B"
+MODEL_NAME="Qwen3-0.6B"
+MODEL_DIR="/home/tyliu/.cache/modelscope/hub/models/Qwen/Qwen3-0___6B"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}Qwen3-0.6B Model Setup${NC}"

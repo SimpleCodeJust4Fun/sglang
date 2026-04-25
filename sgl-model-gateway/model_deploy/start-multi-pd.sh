@@ -86,14 +86,14 @@ case "$MODEL" in
         MODEL_DISPLAY="Qwen2.5-0.5B-Instruct"
         ;;
     qwen3)
-        MODEL_PATH="/home/tyliu/.cache/modelscope/hub/models/qwen/Qwen3-0___6B-MLX-4bit"
-        MODEL_DISPLAY="Qwen3-0.6B-MLX-4bit"
+        MODEL_PATH="/home/tyliu/.cache/modelscope/hub/models/Qwen/Qwen3-0___6B"
+        MODEL_DISPLAY="Qwen3-0.6B-FP16"
         ;;
     *)
         echo -e "\033[0;31mUnknown model: $MODEL\033[0m"
         echo -e "\033[0;36mAvailable models:\033[0m"
         echo "  qwen2.5  - Qwen2.5-0.5B-Instruct"
-        echo "  qwen3    - Qwen3-0.6B-MLX-4bit"
+        echo "  qwen3    - Qwen3-0.6B-FP16"
         exit 1
         ;;
 esac
