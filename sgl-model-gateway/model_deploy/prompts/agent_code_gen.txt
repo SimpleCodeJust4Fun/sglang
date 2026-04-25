@@ -1,0 +1,73 @@
+Write a Python function that implements a simple web scraper.
+The function should:
+1. Take a URL as input
+2. Fetch the HTML content
+3. Extract all text content
+4. Return the text as a string
+
+Include error handling for network failures.
+
+Write a Python function that implements binary search on a sorted array.
+The function should return the index of the target if found, or -1 if not found.
+Include type hints and docstring.
+
+Create a REST API using Flask that implements CRUD operations for a Todo list.
+Include endpoints for: create, read, update, delete.
+Use SQLite for storage.
+
+Implement a simple neural network from scratch using only NumPy.
+The network should have one hidden layer and support binary classification.
+Include forward propagation and backpropagation.
+
+Write a Python decorator that caches function results (memoization).
+The cache should have a maximum size and use LRU eviction.
+Support concurrent access safely.
+
+Create a context manager class that measures execution time using the `time` module.
+It should work with both the `with` statement and as a decorator.
+Print the elapsed time when exiting the context.
+
+Implement a thread-safe producer-consumer queue in Python.
+The queue should have a maximum capacity.
+Use threading primitives (Lock, Condition, etc.).
+
+Write a function that parses a JSON string without using the built-in json module.
+Support strings, numbers, booleans, null, arrays, and objects.
+Handle nested structures correctly.
+
+Create a simple web scraper using requests and BeautifulSoup.
+The function should extract all links from a webpage.
+Handle relative URLs and return absolute URLs.
+Include error handling for network failures.
+
+Implement a LRU (Least Recently Used) cache from scratch.
+Support get and put operations in O(1) time complexity.
+Include a maximum capacity parameter.
+
+Write an async function that fetches multiple URLs concurrently using aiohttp.
+Return a dictionary mapping URLs to their response status codes.
+Include timeout handling and error recovery.
+
+Create a class that implements a simple in-memory key-value database.
+Support transactions (commit/rollback).
+Support basic queries: get, set, delete.
+Thread-safe implementation required.
+
+Implement a function that generates all permutations of a list using backtracking.
+The function should yield permutations one by one (generator).
+Handle duplicate elements correctly.
+
+Write a Python function that implements the observer pattern.
+Create a Subject class that can notify multiple observers.
+Observers should be callable functions.
+Support add/remove observer operations.
+
+Create a rate limiter class that limits function calls to N times per second.
+Use a sliding window algorithm.
+Support concurrent access.
+Include a decorator interface for easy use.
+
+Implement a simple event loop for async I/O operations.
+Support registering coroutines and callbacks.
+Implement select-based I/O multiplexing.
+Handle read and write events.

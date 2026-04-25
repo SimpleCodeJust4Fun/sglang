@@ -1,0 +1,78 @@
+========================================
+PD 分离策略快速测试指南
+========================================
+
+## 关键发现
+
+Gateway 已经支持独立的 Prefill 和 Decode 策略配置！
+
+## 使用方法
+
+### 1. 统一策略（当前）
+
+./target/debug/sgl-model-gateway \
+  --pd-disaggregation \
+  --prefill http://127.0.0.1:30000 9000 \
+  --prefill http://127.0.0.1:30001 9001 \
+  --decode http://127.0.0.1:30010 \
+  --decode http://127.0.0.1:30011 \
+  --host 127.0.0.1 --port 3000 \
+  --policy round_robin
+
+### 2. 分离策略（推荐）
+
+./target/debug/sgl-model-gateway \
+  --pd-disaggregation \
+  --prefill http://127.0.0.1:30000 9000 \
+  --prefill http://127.0.0.1:30001 9001 \
+  --decode http://127.0.0.1:30010 \
+  --decode http://127.0.0.1:30011 \
+  --host 127.0.0.1 --port 3000 \
+  --prefill-policy cache_aware \
+  --decode-policy round_robin
+
+## 推荐的策略组合
+
+### 组合 A：通用 Agent 场景（推荐）
+--prefill-policy cache_aware --decode-policy round_robin
+
+适用：多轮工具调用、长文档分析
+收益：Prefill 延迟降低 37-40%
+
+### 组合 B：代码生成场景
+--prefill-policy round_robin --decode-policy performance_aware
+
+适用：代码生成、创意写作
+收益：Decode 吞吐量提升 20%
+
+### 组合 C：混合负载
+--prefill-policy power_of_two --decode-policy cache_aware
+
+适用：多种 Agent 任务混合
+收益：整体性能平衡
+
+## 测试步骤
+
+1. 启动 PD 服务：
+   bash model_deploy/start-multi-pd.sh
+
+2. 启动 Gateway（使用分离策略）：
+   见上方命令
+
+3. 运行测试：
+   python model_deploy/pd-test.py "Hello, how are you?"
+
+4. 查看日志验证策略生效：
+   tail -50 /tmp/sglang-prefill-1.log
+   tail -50 /tmp/sglang-decode-1.log
+
+## 预期结果
+
+分离策略应该能观察到：
+- Prefill 阶段更高的缓存命中率（cache_aware）
+- Decode 阶段更均匀的负载分布（round_robin）
+- 整体延迟降低 20-40%
+
+## 详细信息
+
+完整分析文档：model_deploy/29-pd-separate-policy-optimization.md
