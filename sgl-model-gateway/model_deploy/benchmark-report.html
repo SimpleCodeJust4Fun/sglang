@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SGLang PD 分离策略 - 综合性能测试报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1600px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .subtitle {
+            text-align: center;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .config-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .config-card h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        .config-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .config-label { font-size: 0.85em; color: #6c757d; }
+        .config-value { font-size: 1.1em; font-weight: bold; color: #2c3e50; }
+        .strategies {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .strategy-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .strategy-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 6px;
+            background: #667eea;
+        }
+        .strategy-card:nth-child(2)::before {
+            background: #f093fb;
+        }
+        .strategy-card:nth-child(3)::before {
+            background: #4facfe;
+        }
+        .strategy-title {
+            font-size: 1.6em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        .stat-card {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-card:nth-child(2) {
+            background: #764ba2;
+        }
+        .stat-card:nth-child(3) {
+            background: #f093fb;
+        }
+        .stat-card:nth-child(4) {
+            background: #4facfe;
+        }
+        .stat-card:nth-child(5) {
+            background: #11998e;
+        }
+        .stat-card:nth-child(6) {
+            background: #fc5c7d;
+        }
+        .stat-value { font-size: 1.8em; font-weight: bold; margin-bottom: 5px; }
+        .stat-label { font-size: 0.8em; opacity: 0.9; }
+        .charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .chart-container h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .chart-wrapper { position: relative; height: 350px; }
+        .comparison-table {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        .comparison-table h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        th, td {
+            padding: 12px 8px;
+            text-align: center;
+            border-bottom: 1px solid #dee2e6;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        tr:hover { background: #f8f9fa; }
+        .winner { color: #28a745; font-weight: bold; }
+        .note-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        .note-box h4 { color: #856404; margin-bottom: 10px; }
+        .note-box p { color: #856404; font-size: 0.9em; line-height: 1.6; }
+        .timestamp {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SGLang PD 分离策略 - 综合性能测试</h1>
+        <div class="subtitle">所有调度策略性能对比报告</div>
+        
+        <div class="config-card">
+            <h3>测试配置</h3>
+            <div class="config-grid">
+                <div class="config-item">
+                    <div class="config-label">模型</div>
+                    <div class="config-value">Qwen2.5-0.5B-GPTQ-Int4</div>
+                </div>
+                <div class="config-item">
+                    <div class="config-label">GPU</div>
+                    <div class="config-value">RTX 4070 Ti SUPER 16GB</div>
+                </div>
+                <div class="config-item">
+                    <div class="config-label">Workers</div>
+                    <div class="config-value">6 (4P+2D)</div>
+                </div>
+                <div class="config-item">
+                    <div class="config-label">Context Length</div>
+                    <div class="config-value">512 tokens</div>
+                </div>
+                <div class="config-item">
+                    <div class="config-label">数据集</div>
+                    <div class="config-value">ShareGPT V3</div>
+                </div>
+                <div class="config-item">
+                    <div class="config-label">测试工具</div>
+                    <div class="config-value">sglang.bench_serving</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="strategies">
+
+            <div class="strategy-card">
+                <div class="strategy-title">Baseline</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1414ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.0</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">864</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">4243ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">748ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Cache Aware</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1694ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2.7</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">783</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">5120ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">1381ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Cache Aware Cache Aware</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1366ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.0</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">869</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">4201ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">750ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Cache Aware Power Of Two</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1219ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2.9</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">856</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3759ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">738ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Cache Aware Random</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1519ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2.9</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">860</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">4758ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">900ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Cache Aware Round Robin</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1309ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.1</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">891</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3809ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">842ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Manual Manual</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1322ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2.9</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">851</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">4210ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">657ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Performance Aware Performance Aware</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">636ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.1</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">895</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">1973ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">283ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Performance Aware Round Robin</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">843ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.1</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">894</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2477ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">413ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Power Of Two Power Of Two</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1391ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.0</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">870</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">4339ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">845ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Power Of Two Round Robin</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1198ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.0</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">865</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3498ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">680ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Random</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1711ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2.7</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">780</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">5369ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">1308ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Random Round Robin</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1085ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.0</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">873</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3248ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">636ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Request Classification Performance Aware</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">643ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.1</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">895</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">1960ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">279ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Request Classification Round Robin</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">841ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.1</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">895</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">2489ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">415ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Request Size Bucket Round Robin</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1290ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.0</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">872</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3831ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">675ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="strategy-card">
+                <div class="strategy-title">Round Robin Round Robin</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">1481ms</div>
+                        <div class="stat-label">平均 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3.0</div>
+                        <div class="stat-label">请求吞吐 (req/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">863</div>
+                        <div class="stat-label">总吞吐 (tok/s)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">4499ms</div>
+                        <div class="stat-label">P99 TTFT</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">848ms</div>
+                        <div class="stat-label">中位延迟</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">32</div>
+                        <div class="stat-label">成功请求</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        
+        <div class="charts">
+            <div class="chart-container">
+                <h3>TTFT 对比 (越低越好)</h3>
+                <div class="chart-wrapper">
+                    <canvas id="ttftChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>总吞吐量对比 (越高越好)</h3>
+                <div class="chart-wrapper">
+                    <canvas id="throughputChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="comparison-table">
+            <h2>详细对比表</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>策略</th>
+                        <th>成功请求</th>
+                        <th>Mean TTFT</th>
+                        <th>Median TTFT</th>
+                        <th>P99 TTFT</th>
+                        <th>Mean E2E</th>
+                        <th>请求吞吐</th>
+                        <th>总吞吐</th>
+                        <th>峰值并发</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td><strong>baseline</strong></td>
+                        <td>32</td>
+                        <td>1414ms</td>
+                        <td>657ms</td>
+                        <td>4243ms</td>
+                        <td>1564ms</td>
+                        <td>3.0 req/s</td>
+                        <td>864 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>cache aware</strong></td>
+                        <td>32</td>
+                        <td>1694ms</td>
+                        <td>836ms</td>
+                        <td>5120ms</td>
+                        <td>2264ms</td>
+                        <td>2.7 req/s</td>
+                        <td>783 tok/s</td>
+                        <td>15</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>cache aware cache aware</strong></td>
+                        <td>32</td>
+                        <td>1366ms</td>
+                        <td>750ms</td>
+                        <td>4201ms</td>
+                        <td>1488ms</td>
+                        <td>3.0 req/s</td>
+                        <td>869 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>cache aware power of two</strong></td>
+                        <td>32</td>
+                        <td>1219ms</td>
+                        <td>632ms</td>
+                        <td>3759ms</td>
+                        <td>1295ms</td>
+                        <td>2.9 req/s</td>
+                        <td>856 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>cache aware random</strong></td>
+                        <td>32</td>
+                        <td>1519ms</td>
+                        <td>810ms</td>
+                        <td>4758ms</td>
+                        <td>1632ms</td>
+                        <td>2.9 req/s</td>
+                        <td>860 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>cache aware round robin</strong></td>
+                        <td>32</td>
+                        <td>1309ms</td>
+                        <td>697ms</td>
+                        <td>3809ms</td>
+                        <td>1400ms</td>
+                        <td>3.1 req/s</td>
+                        <td>891 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>manual manual</strong></td>
+                        <td>32</td>
+                        <td>1322ms</td>
+                        <td>605ms</td>
+                        <td>4210ms</td>
+                        <td>1392ms</td>
+                        <td>2.9 req/s</td>
+                        <td>851 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>performance aware performance aware</strong></td>
+                        <td>32</td>
+                        <td>636ms</td>
+                        <td>283ms</td>
+                        <td>1973ms</td>
+                        <td>642ms</td>
+                        <td>3.1 req/s</td>
+                        <td>895 tok/s</td>
+                        <td>7</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>performance aware round robin</strong></td>
+                        <td>32</td>
+                        <td>843ms</td>
+                        <td>412ms</td>
+                        <td>2477ms</td>
+                        <td>845ms</td>
+                        <td>3.1 req/s</td>
+                        <td>894 tok/s</td>
+                        <td>7</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>power of two power of two</strong></td>
+                        <td>32</td>
+                        <td>1391ms</td>
+                        <td>723ms</td>
+                        <td>4339ms</td>
+                        <td>1531ms</td>
+                        <td>3.0 req/s</td>
+                        <td>870 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>power of two round robin</strong></td>
+                        <td>32</td>
+                        <td>1198ms</td>
+                        <td>680ms</td>
+                        <td>3498ms</td>
+                        <td>1247ms</td>
+                        <td>3.0 req/s</td>
+                        <td>865 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>random</strong></td>
+                        <td>32</td>
+                        <td>1711ms</td>
+                        <td>823ms</td>
+                        <td>5369ms</td>
+                        <td>2329ms</td>
+                        <td>2.7 req/s</td>
+                        <td>780 tok/s</td>
+                        <td>15</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>random round robin</strong></td>
+                        <td>32</td>
+                        <td>1085ms</td>
+                        <td>539ms</td>
+                        <td>3248ms</td>
+                        <td>1114ms</td>
+                        <td>3.0 req/s</td>
+                        <td>873 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>request classification performance aware</strong></td>
+                        <td>32</td>
+                        <td>643ms</td>
+                        <td>278ms</td>
+                        <td>1960ms</td>
+                        <td>645ms</td>
+                        <td>3.1 req/s</td>
+                        <td>895 tok/s</td>
+                        <td>7</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>request classification round robin</strong></td>
+                        <td>32</td>
+                        <td>841ms</td>
+                        <td>415ms</td>
+                        <td>2489ms</td>
+                        <td>843ms</td>
+                        <td>3.1 req/s</td>
+                        <td>895 tok/s</td>
+                        <td>7</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>request size bucket round robin</strong></td>
+                        <td>32</td>
+                        <td>1290ms</td>
+                        <td>646ms</td>
+                        <td>3831ms</td>
+                        <td>1371ms</td>
+                        <td>3.0 req/s</td>
+                        <td>872 tok/s</td>
+                        <td>10</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>round robin round robin</strong></td>
+                        <td>32</td>
+                        <td>1481ms</td>
+                        <td>684ms</td>
+                        <td>4499ms</td>
+                        <td>1642ms</td>
+                        <td>3.0 req/s</td>
+                        <td>863 tok/s</td>
+                        <td>11</td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="note-box">
+            <h4>测试指标说明</h4>
+            <p>
+            <strong>TTFT (Time to First Token):</strong> 从发送请求到收到第一个 token 的时间<br>
+            <strong>E2E Latency:</strong> 端到端延迟，从发送到完成所有 token 的总时间<br>
+            <strong>P99:</strong> 99% 的请求都能满足的延迟指标<br>
+            <strong>Throughput:</strong> 吞吐量，包括请求吞吐 (req/s) 和 token 吞吐 (tok/s)
+            </p>
+        </div>
+        
+        <div class="timestamp">
+            报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+            测试策略数: {len(results)}
+        </div>
+    </div>
+    
+    <script>
+        const strategies = {json.dumps([r.get('_filename', '').replace('bench_', '').replace('.jsonl', '') for r in results])};
+        const ttftMean = {json.dumps([r.get('mean_ttft_ms', 0) for r in results])};
+        const ttftMedian = {json.dumps([r.get('median_ttft_ms', 0) for r in results])};
+        const ttftP99 = {json.dumps([r.get('p99_ttft_ms', 0) for r in results])};
+        const totalThroughput = {json.dumps([r.get('total_throughput', 0) for r in results])};
+        const colors = ['#667eea', '#f093fb', '#4facfe', '#11998e', '#f7971e', '#fc5c7d'];
+        
+        // TTFT Chart
+        new Chart(document.getElementById('ttftChart'), {{
+            type: 'bar',
+            data: {{
+                labels: strategies,
+                datasets: [
+                    {{
+                        label: 'Mean TTFT',
+                        data: ttftMean,
+                        backgroundColor: colors[0] + 'aa',
+                        borderColor: colors[0],
+                        borderWidth: 2
+                    }},
+                    {{
+                        label: 'P99 TTFT',
+                        data: ttftP99,
+                        backgroundColor: colors[1] + 'aa',
+                        borderColor: colors[1],
+                        borderWidth: 2
+                    }}
+                ]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{ position: 'bottom' }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(0) + ' ms'
+                        }}
+                    }}
+                }},
+                scales: {{
+                    y: {{
+                        beginAtZero: true,
+                        title: {{ display: true, text: 'Time (ms)' }}
+                    }}
+                }}
+            }}
+        }});
+        
+        // Throughput Chart
+        new Chart(document.getElementById('throughputChart'), {{
+            type: 'bar',
+            data: {{
+                labels: strategies,
+                datasets: [{{
+                    label: 'Total Throughput (tok/s)',
+                    data: totalThroughput,
+                    backgroundColor: colors.map(c => c + 'aa'),
+                    borderColor: colors,
+                    borderWidth: 2
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{ position: 'bottom' }},
+                    tooltip: {{
+                        callbacks: {{
+                            label: ctx => ctx.parsed.y.toFixed(0) + ' tok/s'
+                        }}
+                    }}
+                }},
+                scales: {{
+                    y: {{
+                        beginAtZero: true,
+                        title: {{ display: true, text: 'Tokens/sec' }}
+                    }}
+                }}
+            }}
+        }});
+    </script>
+</body>
+</html>
