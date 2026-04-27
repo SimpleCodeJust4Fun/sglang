@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -254,13 +255,24 @@ class GatewayEntry:
 # URL to Worker Name Mapping
 # ============================================================
 
-# Default port-to-name mapping (can be overridden by startup log parsing)
-WORKER_NAME_MAP = {
-    'http://127.0.0.1:30000': 'prefill-1',
-    'http://127.0.0.1:30001': 'prefill-2',
-    'http://127.0.0.1:30010': 'decode-1',
-    'http://127.0.0.1:30011': 'decode-2',
-}
+# Default port ranges for auto-discovery
+PREFILL_PORT_BASE = 30000
+DECODE_PORT_BASE = 31000
+PREFILL_PORT_COUNT = 8
+DECODE_PORT_COUNT = 8
+
+def build_worker_name_map():
+    """Build URL-to-worker-name mapping for common port ranges."""
+    mapping = {}
+    for i in range(PREFILL_PORT_COUNT):
+        port = PREFILL_PORT_BASE + i
+        mapping[f'http://127.0.0.1:{port}'] = f'prefill-{i+1}'
+    for i in range(DECODE_PORT_COUNT):
+        port = DECODE_PORT_BASE + i
+        mapping[f'http://127.0.0.1:{port}'] = f'decode-{i+1}'
+    return mapping
+
+WORKER_NAME_MAP = build_worker_name_map()
 
 def url_to_worker_name(url):
     """Convert worker URL to friendly name like 'prefill-1' or 'decode-2'."""
@@ -269,6 +281,48 @@ def url_to_worker_name(url):
     # Remove trailing slash if present
     url = url.rstrip('/')
     return WORKER_NAME_MAP.get(url, url)
+
+
+def _extract_port_from_url(url):
+    """Extract port number from a URL like http://127.0.0.1:30000."""
+    if not url:
+        return None
+    port_match = re.search(r':(\d+)', url)
+    return int(port_match.group(1)) if port_match else None
+
+
+def _match_log_file_by_port(port, log_files, worker_type):
+    """Find the log file whose name contains the expected port or matches worker_type."""
+    if not port:
+        if len(log_files) == 1:
+            return log_files[0]
+        return None
+    for log_path in log_files:
+        log_str = str(log_path)
+        if str(port) in log_str:
+            return log_str
+        if worker_type in log_str.lower() and len(log_files) == 1:
+            return log_str
+    return None
+
+
+def _discover_worker_urls_from_gateway(gw_entries):
+    """Discover worker URLs from gateway log entries and add to WORKER_NAME_MAP."""
+    for entry in gw_entries.values():
+        if entry.prefill_url:
+            url = entry.prefill_url.rstrip('/')
+            if url not in WORKER_NAME_MAP:
+                port = _extract_port_from_url(url)
+                if port and port >= PREFILL_PORT_BASE:
+                    idx = port - PREFILL_PORT_BASE + 1
+                    WORKER_NAME_MAP[url] = f'prefill-{idx}'
+        if entry.decode_url:
+            url = entry.decode_url.rstrip('/')
+            if url not in WORKER_NAME_MAP:
+                port = _extract_port_from_url(url)
+                if port and port >= DECODE_PORT_BASE:
+                    idx = port - DECODE_PORT_BASE + 1
+                    WORKER_NAME_MAP[url] = f'decode-{idx}'
 
 
 def parse_startup_log(filepath):
@@ -371,8 +425,14 @@ def parse_gateway_log(filepath):
             continue
         ts = parse_timestamp(ts_match.group(1))
 
-        # Extract request_id (any format, not just chatcmpl-)
-        req_match = re.search(r'request_id=["\']?([^"\'\s>]+)["\']?', line)
+        # Extract request_id from multiple formats:
+        # 1. Quoted: request_id="chatcmpl-xxx"
+        # 2. Unquoted: request_id=chatcmpl-xxx
+        # 3. Span field format: request_id=chatcmpl-xxx (tracing output)
+        req_match = re.search(
+            r'request_id\s*[=:]\s*["\']?([A-Za-z0-9_-]+)["\']?',
+            line
+        )
         if not req_match:
             continue
         req_id = req_match.group(1)
@@ -384,59 +444,57 @@ def parse_gateway_log(filepath):
         if req_id not in entries:
             entries[req_id] = GatewayEntry(request_id=req_id)
 
+        entry = entries[req_id]
+
         # Check for "started processing request"
         if 'started processing request' in line:
-            if not entries[req_id].start_time:
-                entries[req_id].start_time = ts
-
-            # Extract URI from the same line
-            if not entries[req_id].uri:
-                uri_match = re.search(r'uri=(\S+)', line)
+            if not entry.start_time:
+                entry.start_time = ts
+            if not entry.uri:
+                uri_match = re.search(r'uri\s*[=:]\s*(\S+)', line)
                 if uri_match:
-                    entries[req_id].uri = uri_match.group(1).strip()
+                    entry.uri = uri_match.group(1).strip().rstrip(',')
 
         # Check for "finished processing request"
         elif 'finished processing request' in line:
-            if not entries[req_id].end_time:
-                entries[req_id].end_time = ts
-
-            # Extract status_code
-            status_match = re.search(r'status_code=(\d+)', line)
+            if not entry.end_time:
+                entry.end_time = ts
+            status_match = re.search(r'status_code\s*[=:]\s*(\d+)', line)
             if status_match:
-                entries[req_id].status_code = int(status_match.group(1))
-
-            # Extract latency (try latency_us first, then latency)
-            latency_match = re.search(r'latency_us=(\d+)', line)
+                entry.status_code = int(status_match.group(1))
+            latency_match = re.search(r'latency_us\s*[=:]\s*(\d+)', line)
             if not latency_match:
-                latency_match = re.search(r'latency=(\d+)', line)
+                latency_match = re.search(r'latency(?:_ms)?\s*[=:]\s*(\d+)', line)
             if latency_match:
-                entries[req_id].latency_us = int(latency_match.group(1))
+                entry.latency_us = int(latency_match.group(1))
 
-        # Check for PD-ROUTER events
+        # Check for PD-ROUTER events (contains routing decision)
         if '[PD-ROUTER]' in line:
-            # Extract the event message (everything after request_id)
-            event_match = re.search(r'request_id=["\']?[^"\'\s>]+["\']?\s+(.*)', line)
+            event_match = re.search(
+                r'request_id\s*[=:]\s*["\']?[^"\'\s>]+["\']?\s+(.*)',
+                line
+            )
             if event_match:
                 event_text = event_match.group(1).strip()
-                # Remove the module prefix if present
-                if 'smg::' in event_text or 'src/' in event_text:
-                    # Skip detailed processing lines, only keep high-level router events
-                    pass
-                else:
-                    entries[req_id].pd_router_events.append({'time': ts_match.group(1), 'event': event_text})
-                    
+                # Skip detailed internal processing lines
+                if 'smg::' not in event_text and 'src/' not in event_text:
+                    entry.pd_router_events.append({
+                        'time': ts_match.group(1),
+                        'event': event_text
+                    })
+
                     # Extract prefill and decode URLs
                     prefill_match = re.search(r'prefill=(http://[\d.:]+)', event_text)
                     decode_match = re.search(r'decode=(http://[\d.:]+)', event_text)
                     if prefill_match:
-                        entries[req_id].prefill_url = prefill_match.group(1)
+                        entry.prefill_url = prefill_match.group(1)
                     if decode_match:
-                        entries[req_id].decode_url = decode_match.group(1)
-                    
+                        entry.decode_url = decode_match.group(1)
+
                     # Extract bootstrap_room
                     br_match = re.search(r'bootstrap_room=(\d+)', event_text)
                     if br_match:
-                        entries[req_id].bootstrap_room = br_match.group(1)
+                        entry.bootstrap_room = br_match.group(1)
 
     return entries
 
@@ -614,57 +672,37 @@ def correlate_by_request_id(gw_entries, prefill_entries, decode_entries, request
     # Determine which log files to search based on gateway routing info
     expected_prefill_log = None
     expected_decode_log = None
-    
+
     if gw.prefill_url:
-        url = gw.prefill_url.rstrip('/')
-        # Map URL to expected log file
-        for log in (prefill_logs or []):
-            log_path = str(log)
-            # Try to match by port in URL
-            if ':30000' in url and 'prefill-1' in log_path:
-                expected_prefill_log = log_path
-                break
-            elif ':30001' in url and 'prefill-2' in log_path:
-                expected_prefill_log = log_path
-                break
-            elif 'prefill' in log_path and len(prefill_logs or []) == 1:
-                expected_prefill_log = log_path
-                break
-    
+        port = _extract_port_from_url(gw.prefill_url)
+        expected_prefill_log = _match_log_file_by_port(
+            port, prefill_logs or [], 'prefill'
+        )
+
     if gw.decode_url:
-        url = gw.decode_url.rstrip('/')
-        for log in (decode_logs or []):
-            log_path = str(log)
-            if ':30010' in url and 'decode-1' in log_path:
-                expected_decode_log = log_path
-                break
-            elif ':30011' in url and 'decode-2' in log_path:
-                expected_decode_log = log_path
-                break
-            elif 'decode' in log_path and len(decode_logs or []) == 1:
-                expected_decode_log = log_path
-                break
+        port = _extract_port_from_url(gw.decode_url)
+        expected_decode_log = _match_log_file_by_port(
+            port, decode_logs or [], 'decode'
+        )
     
     # Filter entries by expected log files first
     prefill_candidates = []
     decode_candidates = []
-    
+
     for rid, pf in prefill_entries.items():
         if pf.is_health_check:
             continue
         if pf.timestamp and pf.bootstrap_room:
-            # Check if this entry is from the expected log file
             if expected_prefill_log and pf.log_file != expected_prefill_log:
                 continue
             diff = abs((pf.timestamp - gw.start_time).total_seconds())
             if diff <= window_sec:
                 prefill_candidates.append((diff, pf))
-    
+
     for rid, dc in decode_entries.items():
         if dc.is_health_check:
             continue
         if dc.timestamp and dc.bootstrap_room:
-            # Check if this entry is from the expected log file
             if expected_decode_log and dc.log_file != expected_decode_log:
                 continue
             diff = abs((dc.timestamp - gw.start_time).total_seconds())
@@ -927,8 +965,19 @@ def print_log_trace(gw_entry, prefill_matches, decode_matches, verbose=False, re
         print_sglang_section(dc, 'Decode', verbose, correlated_info)
 
     if not prefill_matches and not decode_matches:
-        print(f"  {C.YELLOW}No SGLang log entries found near request time{C.RESET}")
-        print(f"  {C.DIM}(Logs may be in different directory or not flushed yet){C.RESET}")
+        if gw_entry and (gw_entry.prefill_url or gw_entry.decode_url):
+            # For 6worker architecture, show Gateway routing as primary info
+            prefill_name = url_to_worker_name(gw_entry.prefill_url)
+            decode_name = url_to_worker_name(gw_entry.decode_url)
+            print(f"\n  {C.BOLD}{C.GREEN}-- Request Routing (from Gateway) --{C.RESET}")
+            print(f"  {C.CYAN}Prefill Worker:{C.RESET} {C.GREEN}{prefill_name}{C.RESET} ({gw_entry.prefill_url or 'N/A'})")
+            print(f"  {C.CYAN}Decode Worker:{C.RESET}  {C.RED}{decode_name}{C.RESET} ({gw_entry.decode_url or 'N/A'})")
+            if gw_entry.bootstrap_room:
+                print(f"  {C.CYAN}Bootstrap Room:{C.RESET} {gw_entry.bootstrap_room}")
+            print(f"  {C.DIM}(SGLang worker logs don't contain detailed request entries in this deployment){C.RESET}")
+        else:
+            print(f"  {C.YELLOW}No SGLang log entries found near request time{C.RESET}")
+            print(f"  {C.DIM}(Logs may be in different directory or not flushed yet){C.RESET}")
 
     print(f"\n{C.BLUE}{'-' * 70}{C.RESET}")
 
@@ -1060,13 +1109,18 @@ def main():
         gateway_candidates = [
             log_dir / 'sgl-gateway-test.log',
             log_dir / 'sgl-gateway.log',
+            log_dir / 'gateway.log',
         ]
-        # Also check for policy-specific logs
+        # Policy-specific logs
         for pattern in log_dir.glob('sgl-gateway-*.log'):
             gateway_candidates.append(pattern)
-        # Also check for gateway.log
-        if (log_dir / 'gateway.log').exists():
-            gateway_candidates.append(log_dir / 'gateway.log')
+        # Rust binary default naming (smg.YYYY-MM-DD or smg-*)
+        for f in log_dir.glob('smg*'):
+            if f.is_file() and f.stat().st_size > 0:
+                gateway_candidates.append(f)
+        for pattern in log_dir.glob('smg-*'):
+            if pattern.is_file() and pattern.stat().st_size > 0:
+                gateway_candidates.append(pattern)
 
         # Find the most recently modified non-empty gateway log
         gateway_log = None
@@ -1077,7 +1131,7 @@ def main():
 
         if not gateway_log:
             print(f"{C.YELLOW}Warning: No Gateway log found in {log_dir}{C.RESET}")
-            print(f"{C.DIM}  Searched: sgl-gateway-test.log, sgl-gateway-*.log, gateway.log{C.RESET}")
+            print(f"{C.DIM}  Searched: sgl-gateway-test.log, sgl-gateway-*.log, smg*, gateway.log{C.RESET}")
             gateway_log = str(log_dir / 'sgl-gateway-test.log')  # fallback
 
     # Prefill log discovery
@@ -1150,7 +1204,8 @@ def main():
 
     # Process each prompt
     for i, p in enumerate(prompts):
-        request_id = f"test-{int(time.time())}-{i}"
+        # Use millisecond timestamp + random suffix to ensure unique IDs
+        request_id = f"test-{int(time.time() * 1000)}-{i}-{os.urandom(2).hex()}"
         
         # Only print progress in non-JSON mode
         if not args.json:
@@ -1179,6 +1234,9 @@ def main():
             # Re-parse logs for each request (to get latest)
             gw_entries = parse_gateway_log(gateway_log)
 
+            # Discover worker URLs from gateway logs and add to WORKER_NAME_MAP
+            _discover_worker_urls_from_gateway(gw_entries)
+
             pf_entries = {}
             for log in prefill_logs:
                 pf_entries.update(parse_sglang_log(log))
@@ -1189,6 +1247,15 @@ def main():
 
             # Try to correlate by gateway request_id (from response header)
             gw_req_id = result.get('gateway_request_id', result.get('request_id', request_id))
+            
+            # DEBUG: Show what request IDs we're trying to match
+            if args.verbose:
+                print(f"\n  {C.DIM}[DEBUG] Sent request_id: {request_id}{C.RESET}")
+                print(f"  {C.DIM}[DEBUG] Gateway returned (X-Request-ID): {result.get('gateway_request_id', 'N/A')}{C.RESET}")
+                print(f"  {C.DIM}[DEBUG] Response body request_id: {result.get('request_id', 'N/A')}{C.RESET}")
+                print(f"  {C.DIM}[DEBUG] Trying to correlate by: {gw_req_id}{C.RESET}")
+                print(f"  {C.DIM}[DEBUG] Available gateway entries: {list(gw_entries.keys())[-3:]}{C.RESET}")
+            
             gw_match, pf_matches, dc_matches = correlate_by_request_id(
                 gw_entries, pf_entries, dc_entries, gw_req_id, args.window,
                 prefill_logs=prefill_logs, decode_logs=decode_logs
@@ -1213,6 +1280,15 @@ def main():
                     if gw.start_time and abs((gw.start_time - local_to_utc(result['start_time'])).total_seconds()) <= args.window:
                         gw_match = gw
                         break
+            
+            # For 6worker architecture where SGLang logs don't have detailed entries,
+            # just use Gateway routing info directly
+            if gw_match and not pf_matches and not dc_matches:
+                # Create pseudo-entries from Gateway routing info
+                if gw_match.prefill_url or gw_match.decode_url:
+                    if args.verbose:
+                        print(f"\n  {C.DIM}[INFO] SGLang worker logs don't contain detailed request entries{C.RESET}")
+                        print(f"  {C.DIM}[INFO] Using Gateway routing info directly{C.RESET}")
 
             if not args.json:
                 if gw_match:
@@ -1243,6 +1319,10 @@ def main():
         else:
             # In --no-trace mode, still try to get gateway routing info from logs
             gw_entries = parse_gateway_log(gateway_log)
+
+            # Discover worker URLs from gateway logs and add to WORKER_NAME_MAP
+            _discover_worker_urls_from_gateway(gw_entries)
+
             gw_req_id = result.get('gateway_request_id', result.get('request_id', request_id))
             
             # Try to find gateway entry by request_id

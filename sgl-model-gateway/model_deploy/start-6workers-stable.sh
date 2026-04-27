@@ -26,7 +26,7 @@ killall -9 python3 2>/dev/null || true
 sleep 3
 
 # Common arguments for all workers
-COMMON_ARGS="--model-path $MODEL --host 127.0.0.1 --context-length 512 --log-level warning"
+COMMON_ARGS="--model-path $MODEL --host 127.0.0.1 --context-length 512 --log-level info --log-requests"
 
 # Start 4 Prefill Workers IN PARALLEL
 echo "Starting 4 Prefill workers (parallel)..."
@@ -107,15 +107,15 @@ if [ $total_count -eq 6 ]; then
     echo ""
     echo "./target/debug/sgl-model-gateway \\"
     echo "  --pd-disaggregation \\"
-    echo "  --prefill http://127.0.0.1:30000 90000 \\"
-    echo "  --prefill http://127.0.0.1:30001 90001 \\"
-    echo "  --prefill http://127.0.0.1:30002 90002 \\"
-    echo "  --prefill http://127.0.0.1:30003 90003 \\"
+    echo "  --prefill http://127.0.0.1:30000 9000 \\"
+    echo "  --prefill http://127.0.0.1:30001 9001 \\"
+    echo "  --prefill http://127.0.0.1:30002 9002 \\"
+    echo "  --prefill http://127.0.0.1:30003 9003 \\"
     echo "  --decode http://127.0.0.1:31000 \\"
     echo "  --decode http://127.0.0.1:31001 \\"
     echo "  --prefill-policy cache_aware \\"
     echo "  --decode-policy round_robin \\"
-    echo "  --log-level warning"
+    echo "  --log-level info"
     echo ""
 else
     echo "WARNING: Only $total_count / 6 workers survived."

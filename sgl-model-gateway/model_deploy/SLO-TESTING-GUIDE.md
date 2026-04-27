@@ -56,7 +56,22 @@ Gateway 启动参数示例：
   --log-level warn
 ```
 
+./target/release/sgl-model-gateway \
+  --pd-disaggregation \
+  --prefill http://127.0.0.1:30000 9000 \
+  --prefill http://127.0.0.1:30001 9001 \
+  --prefill http://127.0.0.1:30002 9002 \
+  --prefill http://127.0.0.1:30003 9003 \
+  --decode http://127.0.0.1:31000 \
+  --decode http://127.0.0.1:31001 \
+  --prefill-policy round_robin \
+  --decode-policy round_robin \
+  --host 127.0.0.1 \
+  --port 3000 \
+  --log-level info \
+  > /tmp/sgl-gateway-test.log 2>&1
 ---
+
 
 ## 2. 可用调度策略列表
 
