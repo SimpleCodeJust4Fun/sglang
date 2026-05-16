@@ -3,10 +3,12 @@
 use std::sync::Arc;
 
 use super::{
-    BucketConfig, BucketPolicy, CacheAwareConfig, CacheAwarePolicy, ConsistentHashingPolicy,
-    LoadBalancingPolicy, ManualConfig, ManualPolicy, PerformanceAwareConfig, PerformanceAwarePolicy,
-    PowerOfTwoPolicy, PrefixHashConfig, PrefixHashPolicy, RandomPolicy, RequestClassificationConfig,
-    RequestClassificationPolicy, RequestSizeBucketConfig, RequestSizeBucketPolicy, RoundRobinPolicy,
+    BucketConfig, BucketPolicy, CacheAwareConfig, CacheAwarePolicy, CompositeConfig, CompositePolicy,
+    ConsistentHashingPolicy, LoadBalancingPolicy, ManualConfig, ManualPolicy, PerformanceAwareConfig,
+    PerformanceAwarePolicy, PowerOfTwoPolicy, PrefixHashConfig, PrefixHashPolicy, RandomPolicy,
+    RequestClassificationConfig, RequestClassificationPolicy, RequestProfilingConfig,
+    RequestProfilingPolicy, RequestSizeBucketConfig, RequestSizeBucketPolicy, RoofLineConfig,
+    RoofLinePolicy, RoundRobinPolicy,
 };
 use crate::config::PolicyConfig;
 
@@ -115,6 +117,48 @@ impl PolicyFactory {
                 };
                 Arc::new(RequestClassificationPolicy::with_config(config))
             }
+            PolicyConfig::RequestProfiling {
+                short_input_threshold,
+                long_input_threshold,
+                large_output_threshold,
+            } => {
+                let config = RequestProfilingConfig {
+                    short_input_threshold: *short_input_threshold,
+                    long_input_threshold: *long_input_threshold,
+                    large_output_threshold: *large_output_threshold,
+                    ..Default::default()
+                };
+                Arc::new(RequestProfilingPolicy::with_config(config))
+            }
+            PolicyConfig::RoofLine {
+                weight_compute,
+                weight_memory,
+            } => {
+                let config = RoofLineConfig {
+                    weight_compute: *weight_compute,
+                    weight_memory: *weight_memory,
+                };
+                Arc::new(RoofLinePolicy::with_config(config))
+            }
+            PolicyConfig::Composite {
+                low_threshold,
+                high_threshold,
+            } => {
+                let config = CompositeConfig {
+                    low_threshold: *low_threshold,
+                    high_threshold: *high_threshold,
+                };
+                // Default sub-policies: RoundRobin (distribution) + RoofLine (affinity)
+                let distribution: Arc<dyn LoadBalancingPolicy> =
+                    Arc::new(RoundRobinPolicy::new());
+                let affinity: Arc<dyn LoadBalancingPolicy> =
+                    Arc::new(RoofLinePolicy::new());
+                Arc::new(CompositePolicy::with_config(
+                    distribution,
+                    affinity,
+                    config,
+                ))
+            }
         }
     }
 
@@ -139,6 +183,19 @@ impl PolicyFactory {
             }
             "request_classification" | "requestclassification" => {
                 Some(Arc::new(RequestClassificationPolicy::new()))
+            }
+            "request_profiling" | "requestprofiling" => {
+                Some(Arc::new(RequestProfilingPolicy::new()))
+            }
+            "roofline" | "roof_line" => {
+                Some(Arc::new(RoofLinePolicy::new()))
+            }
+            "composite" => {
+                let distribution: Arc<dyn LoadBalancingPolicy> =
+                    Arc::new(RoundRobinPolicy::new());
+                let affinity: Arc<dyn LoadBalancingPolicy> =
+                    Arc::new(RoofLinePolicy::new());
+                Some(Arc::new(CompositePolicy::new(distribution, affinity)))
             }
             _ => None,
         }
@@ -187,6 +244,44 @@ mod tests {
 
         let policy = PolicyFactory::create_from_config(&PolicyConfig::ConsistentHashing);
         assert_eq!(policy.name(), "consistent_hashing");
+
+        let policy = PolicyFactory::create_from_config(&PolicyConfig::RequestProfiling {
+            short_input_threshold: 500,
+            long_input_threshold: 4000,
+            large_output_threshold: 1024,
+        });
+        assert_eq!(policy.name(), "request_profiling");
+
+        let policy = PolicyFactory::create_from_config(&PolicyConfig::RequestProfiling {
+            short_input_threshold: 200,
+            long_input_threshold: 2000,
+            large_output_threshold: 512,
+        });
+        assert_eq!(policy.name(), "request_profiling");
+
+        let policy = PolicyFactory::create_from_config(&PolicyConfig::RoofLine {
+            weight_compute: 0.5,
+            weight_memory: 0.5,
+        });
+        assert_eq!(policy.name(), "roofline");
+
+        let policy = PolicyFactory::create_from_config(&PolicyConfig::RoofLine {
+            weight_compute: 0.7,
+            weight_memory: 0.3,
+        });
+        assert_eq!(policy.name(), "roofline");
+
+        let policy = PolicyFactory::create_from_config(&PolicyConfig::Composite {
+            low_threshold: 0.3,
+            high_threshold: 0.7,
+        });
+        assert_eq!(policy.name(), "composite");
+
+        let policy = PolicyFactory::create_from_config(&PolicyConfig::Composite {
+            low_threshold: 0.1,
+            high_threshold: 0.5,
+        });
+        assert_eq!(policy.name(), "composite");
     }
 
     #[tokio::test]
@@ -205,6 +300,13 @@ mod tests {
         assert!(PolicyFactory::create_by_name("Manual").is_some());
         assert!(PolicyFactory::create_by_name("consistent_hashing").is_some());
         assert!(PolicyFactory::create_by_name("ConsistentHashing").is_some());
+        assert!(PolicyFactory::create_by_name("request_profiling").is_some());
+        assert!(PolicyFactory::create_by_name("RequestProfiling").is_some());
+        assert!(PolicyFactory::create_by_name("roofline").is_some());
+        assert!(PolicyFactory::create_by_name("RoofLine").is_some());
+        assert!(PolicyFactory::create_by_name("roof_line").is_some());
+        assert!(PolicyFactory::create_by_name("composite").is_some());
+        assert!(PolicyFactory::create_by_name("Composite").is_some());
         assert!(PolicyFactory::create_by_name("unknown").is_none());
     }
 }

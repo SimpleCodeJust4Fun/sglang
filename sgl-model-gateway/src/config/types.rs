@@ -353,6 +353,55 @@ pub enum PolicyConfig {
         #[serde(default = "default_auto_assign_workers")]
         auto_assign_workers: bool,
     },
+
+    /// Request profiling policy for heterogeneous GPU scheduling with worker affinity.
+    /// Classifies requests by input length, output length, and streaming mode,
+    /// then routes to pre-configured worker groups via `profile` labels.
+    /// Workers declare affinity via: --worker-label profile=short|long|large_output|default
+    #[serde(rename = "request_profiling")]
+    RequestProfiling {
+        /// Threshold for short input in characters (default: 500)
+        #[serde(default = "default_rp_short_input_threshold")]
+        short_input_threshold: usize,
+        /// Threshold for long input in characters (default: 4000)
+        #[serde(default = "default_rp_long_input_threshold")]
+        long_input_threshold: usize,
+        /// Threshold for large output in tokens (default: 1024)
+        #[serde(default = "default_rp_large_output_threshold")]
+        large_output_threshold: usize,
+    },
+
+    /// RoofLine policy for hardware-aware heterogeneous GPU scheduling.
+    /// Scores workers by GPU capability (TFLOPS, memory bandwidth) and routes
+    /// requests to the best-fit hardware based on compute/memory needs.
+    /// Workers declare GPU type via labels: gpu_name=H800|H20|A100|RTX 4090 etc.
+    /// Prefill phase: prefer high TFLOPS (set weight_compute high)
+    /// Decode phase: prefer high memory bandwidth (set weight_memory high)
+    #[serde(rename = "roofline")]
+    RoofLine {
+        /// Weight for compute capability in scoring (default: 0.5)
+        #[serde(default = "default_roofline_weight_compute")]
+        weight_compute: f64,
+        /// Weight for memory bandwidth in scoring (default: 0.5)
+        #[serde(default = "default_roofline_weight_memory")]
+        weight_memory: f64,
+    },
+
+    /// Composite policy with PhaseSwitcher that combines a distribution policy
+    /// (load-balancing) and an affinity policy (hardware-aware matching).
+    /// Automatically switches between them based on system load:
+    /// - Low load → affinity (best hardware match)
+    /// - High load → distribution (even load spread)
+    /// - Transition zone → probabilistic blend
+    #[serde(rename = "composite")]
+    Composite {
+        /// Below this load level, use affinity policy exclusively (default: 0.3)
+        #[serde(default = "default_composite_low_threshold")]
+        low_threshold: f64,
+        /// Above this load level, use distribution policy exclusively (default: 0.7)
+        #[serde(default = "default_composite_high_threshold")]
+        high_threshold: f64,
+    },
 }
 
 fn default_prefix_token_count() -> usize {
@@ -426,6 +475,37 @@ fn default_auto_assign_workers() -> bool {
     true
 }
 
+// RequestProfiling defaults
+fn default_rp_short_input_threshold() -> usize {
+    500
+}
+
+fn default_rp_long_input_threshold() -> usize {
+    4000
+}
+
+fn default_rp_large_output_threshold() -> usize {
+    1024
+}
+
+// RoofLine defaults
+fn default_roofline_weight_compute() -> f64 {
+    0.5
+}
+
+fn default_roofline_weight_memory() -> f64 {
+    0.5
+}
+
+// Composite defaults
+fn default_composite_low_threshold() -> f64 {
+    0.3
+}
+
+fn default_composite_high_threshold() -> f64 {
+    0.7
+}
+
 impl PolicyConfig {
     pub fn name(&self) -> &'static str {
         match self {
@@ -440,6 +520,9 @@ impl PolicyConfig {
             PolicyConfig::RequestSizeBucket { .. } => "request_size_bucket",
             PolicyConfig::PerformanceAware { .. } => "performance_aware",
             PolicyConfig::RequestClassification { .. } => "request_classification",
+            PolicyConfig::RequestProfiling { .. } => "request_profiling",
+            PolicyConfig::RoofLine { .. } => "roofline",
+            PolicyConfig::Composite { .. } => "composite",
         }
     }
 }

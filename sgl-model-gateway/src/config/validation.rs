@@ -336,6 +336,58 @@ impl ConfigValidator {
                     });
                 }
             }
+            PolicyConfig::RequestProfiling {
+                short_input_threshold,
+                long_input_threshold,
+                large_output_threshold: _,
+            } => {
+                if *short_input_threshold == 0 {
+                    return Err(ConfigError::InvalidValue {
+                        field: "short_input_threshold".to_string(),
+                        value: short_input_threshold.to_string(),
+                        reason: "Must be > 0".to_string(),
+                    });
+                }
+
+                if *long_input_threshold <= *short_input_threshold {
+                    return Err(ConfigError::InvalidValue {
+                        field: "long_input_threshold".to_string(),
+                        value: long_input_threshold.to_string(),
+                        reason: "Must be > short_input_threshold".to_string(),
+                    });
+                }
+            }
+            PolicyConfig::RoofLine {
+                weight_compute,
+                weight_memory,
+            } => {
+                let total = *weight_compute + *weight_memory;
+                if (total - 1.0).abs() > 0.001 {
+                    return Err(ConfigError::InvalidValue {
+                        field: "roofline weights".to_string(),
+                        value: format!(
+                            "weight_compute={}, weight_memory={}",
+                            weight_compute, weight_memory
+                        ),
+                        reason: "Sum of weights must equal 1.0".to_string(),
+                    });
+                }
+            }
+            PolicyConfig::Composite {
+                low_threshold,
+                high_threshold,
+            } => {
+                if *high_threshold <= *low_threshold {
+                    return Err(ConfigError::InvalidValue {
+                        field: "composite thresholds".to_string(),
+                        value: format!(
+                            "low_threshold={}, high_threshold={}",
+                            low_threshold, high_threshold
+                        ),
+                        reason: "high_threshold must be > low_threshold".to_string(),
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -1083,5 +1135,149 @@ mod tests {
 
         let result = ConfigValidator::validate(&config);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_profiling_valid() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::RequestProfiling {
+                short_input_threshold: 500,
+                long_input_threshold: 4000,
+                large_output_threshold: 1024,
+            },
+        );
+
+        assert!(ConfigValidator::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_profiling_zero_short_threshold() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::RequestProfiling {
+                short_input_threshold: 0,
+                long_input_threshold: 4000,
+                large_output_threshold: 1024,
+            },
+        );
+
+        let result = ConfigValidator::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_request_profiling_threshold_order() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::RequestProfiling {
+                short_input_threshold: 5000,
+                long_input_threshold: 4000,
+                large_output_threshold: 1024,
+            },
+        );
+
+        let result = ConfigValidator::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_roofline_valid() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::RoofLine {
+                weight_compute: 0.5,
+                weight_memory: 0.5,
+            },
+        );
+
+        assert!(ConfigValidator::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_roofline_weights_not_sum_to_one() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::RoofLine {
+                weight_compute: 0.8,
+                weight_memory: 0.5,
+            },
+        );
+
+        let result = ConfigValidator::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_roofline_weights_zero() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::RoofLine {
+                weight_compute: 0.0,
+                weight_memory: 0.0,
+            },
+        );
+
+        let result = ConfigValidator::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_composite_valid() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::Composite {
+                low_threshold: 0.3,
+                high_threshold: 0.7,
+            },
+        );
+
+        assert!(ConfigValidator::validate(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_composite_threshold_order_invalid() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::Composite {
+                low_threshold: 0.8,
+                high_threshold: 0.5,
+            },
+        );
+
+        let result = ConfigValidator::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_composite_thresholds_equal_invalid() {
+        let config = RouterConfig::new(
+            RoutingMode::Regular {
+                worker_urls: vec!["http://worker:8000".to_string()],
+            },
+            PolicyConfig::Composite {
+                low_threshold: 0.5,
+                high_threshold: 0.5,
+            },
+        );
+
+        let result = ConfigValidator::validate(&config);
+        assert!(result.is_err());
     }
 }
